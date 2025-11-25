@@ -1,0 +1,794 @@
+openapi: 3.1.0
+info:
+  title: Pixie API
+  version: 0.1.0
+paths:
+  /api/v1/health:
+    get:
+      tags:
+      - health
+      - health
+      summary: Health Check
+      description: Health check endpoint.
+      operationId: health_check_api_v1_health_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties:
+                  type: string
+                type: object
+                title: Response Health Check Api V1 Health Get
+  /api/v1/health/live:
+    get:
+      tags:
+      - health
+      - health
+      summary: Liveness Check
+      description: Liveness probe endpoint.
+      operationId: liveness_check_api_v1_health_live_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties:
+                  type: string
+                type: object
+                title: Response Liveness Check Api V1 Health Live Get
+  /api/v1/health/ready:
+    get:
+      tags:
+      - health
+      - health
+      summary: Readiness Check
+      description: Readiness probe endpoint.
+      operationId: readiness_check_api_v1_health_ready_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties:
+                  type: string
+                type: object
+                title: Response Readiness Check Api V1 Health Ready Get
+  /api/v1/projects/{project_id}/tools:
+    get:
+      tags:
+      - tools
+      summary: List Tools Endpoint
+      description: 'Get list of all tools in a project.
+
+
+        Returns list of tools with:
+
+        - toolId
+
+        - projectId
+
+        - toolName
+
+        - toolDescription (truncated to 200 characters)
+
+        - toolType
+
+        - status'
+      operationId: list_tools_endpoint_api_v1_projects__project_id__tools_get
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Project Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ToolListResponse'
+                title: Response List Tools Endpoint Api V1 Projects  Project Id  Tools
+                  Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      tags:
+      - tools
+      summary: Import Tool Endpoint
+      description: 'Import a new tool.
+
+
+        Creates a new tool with a randomly generated hex toolId.
+
+        Accepts all tool information except toolId.
+
+        The project_id must be provided in the URL path parameter.
+
+
+        Returns the created tool with generated toolId.'
+      operationId: import_tool_endpoint_api_v1_projects__project_id__tools_post
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Project Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ToolCreate'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ToolResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/projects/{project_id}/tools/{tool_id}:
+    get:
+      tags:
+      - tools
+      summary: Get Tool Endpoint
+      description: 'Get a tool by project ID and tool ID.
+
+
+        Returns complete tool information including:
+
+        - toolId
+
+        - projectId
+
+        - toolName
+
+        - toolDescription
+
+        - toolType
+
+        - status
+
+        - apiEndpointConfiguration
+
+        - mcpClientConfiguration
+
+        - uiResource
+
+        - temporaryUiResource
+
+        - toolInputSchema
+
+        - toolOutputSchema'
+      operationId: get_tool_endpoint_api_v1_projects__project_id__tools__tool_id__get
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Project Id
+      - name: tool_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Tool Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ToolResponse'
+        '404':
+          description: Tool or project not found
+          content:
+            application/json:
+              schema:
+                type: object
+                title: Error Detail
+                properties:
+                  detail:
+                    type: string
+                    example: Tool with ID 'xxx' not found in project 'yyy'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    patch:
+      tags:
+      - tools
+      summary: Update Tool Endpoint
+      description: 'Update a tool.
+
+        Updates updatable fields of a tool. The following fields cannot be updated:
+
+        - projectId (immutable)
+
+        - toolId (immutable)
+
+        - api_endpoint_configuration (immutable)
+
+        - mcp_client_configuration (immutable)
+
+        Only provided fields will be updated. Fields not included in the request will remain unchanged.
+
+        Special: Set use_temporary_ui_resource to true to copy temporary_ui_resource to ui_resource.
+
+
+        Returns the updated tool.'
+      operationId: update_tool_endpoint_api_v1_projects__project_id__tools__tool_id__patch
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Project Id
+      - name: tool_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Tool Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ToolUpdate'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ToolResponse'
+        '404':
+          description: Tool or project not found
+          content:
+            application/json:
+              schema:
+                type: object
+                title: Error Detail
+                properties:
+                  detail:
+                    type: string
+                    example: Tool with ID 'xxx' not found in project 'yyy'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    delete:
+      tags:
+      - tools
+      summary: Delete Tool Endpoint
+      description: 'Delete a tool.
+
+        Permanently deletes a tool from the project. This operation cannot be undone.
+
+
+        Returns 204 No Content on successful deletion.'
+      operationId: delete_tool_endpoint_api_v1_projects__project_id__tools__tool_id__delete
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Project Id
+      - name: tool_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Tool Id
+      responses:
+        '204':
+          description: Successful Response
+        '404':
+          description: Tool or project not found
+          content:
+            application/json:
+              schema:
+                type: object
+                title: Error Detail
+                properties:
+                  detail:
+                    type: string
+                    example: Tool with ID 'xxx' not found in project 'yyy'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/projects/{project_id}/tools/{tool_id}/ensure-ui-resource:
+    post:
+      tags:
+      - tools
+      summary: Ensure UI Resource Endpoint
+      description: 'Ensure UI resource exists for a tool.
+
+        Fetches the tool details from the database. If the tool''s UI resource is missing,
+
+        creates a default React HTML UI resource with dummy images and updates the tool.
+
+
+        Returns the tool with the UI resource (either existing or newly created).'
+      operationId: ensure_ui_resource_endpoint_api_v1_projects__project_id__tools__tool_id__ensure_ui_resource_post
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Project Id
+      - name: tool_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Tool Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ToolResponse'
+        '404':
+          description: Tool or project not found
+          content:
+            application/json:
+              schema:
+                type: object
+                title: Error Detail
+                properties:
+                  detail:
+                    type: string
+                    example: Tool with ID 'xxx' not found in project 'yyy'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+components:
+  schemas:
+    APIEndpointConfiguration:
+      properties:
+        url:
+          type: string
+          title: Url
+          description: API endpoint URL
+        method:
+          type: string
+          title: Method
+          description: HTTP method
+          default: GET
+        headers:
+          anyOf:
+          - additionalProperties:
+              type: string
+            type: object
+          - type: 'null'
+          title: Headers
+          description: HTTP headers
+        timeout:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Timeout
+          description: Request timeout in seconds
+      type: object
+      required:
+      - url
+      title: APIEndpointConfiguration
+      description: API endpoint configuration for a tool.
+    Annotations:
+      properties:
+        audience:
+          anyOf:
+          - items:
+              type: string
+              enum:
+              - user
+              - assistant
+            type: array
+          - type: 'null'
+          title: Audience
+        priority:
+          anyOf:
+          - type: number
+            maximum: 1.0
+            minimum: 0.0
+          - type: 'null'
+          title: Priority
+      additionalProperties: true
+      type: object
+      title: Annotations
+    BlobResourceContents:
+      properties:
+        uri:
+          type: string
+          minLength: 1
+          format: uri
+          title: Uri
+        mimeType:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Mimetype
+        blob:
+          type: string
+          title: Blob
+      additionalProperties: true
+      type: object
+      required:
+      - uri
+      - blob
+      title: BlobResourceContents
+      description: Binary contents of a resource.
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    MCPClientConfiguration:
+      properties:
+        server_url:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Server Url
+          description: MCP server URL
+        transport:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Transport
+          description: Transport type (stdio, sse, etc.)
+        credentials:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Credentials
+          description: MCP client credentials
+      type: object
+      title: MCPClientConfiguration
+      description: MCP client configuration for a tool.
+    TextResourceContents:
+      properties:
+        uri:
+          type: string
+          minLength: 1
+          format: uri
+          title: Uri
+        mimeType:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Mimetype
+        text:
+          type: string
+          title: Text
+      additionalProperties: true
+      type: object
+      required:
+      - uri
+      - text
+      title: TextResourceContents
+      description: Text contents of a resource.
+    ToolCreate:
+      properties:
+        project_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Project Id
+          description: Project ID (optional - will be taken from URL path parameter)
+        tool_name:
+          type: string
+          maxLength: 255
+          minLength: 1
+          title: Tool Name
+          description: Name of the tool
+        tool_description:
+          type: string
+          title: Tool Description
+          description: Description of the tool
+        tool_type:
+          type: string
+          title: Tool Type
+          description: Type of the tool
+        status:
+          type: string
+          title: Status
+          description: Status of the tool
+          default: active
+        api_endpoint_configuration:
+          anyOf:
+          - $ref: '#/components/schemas/APIEndpointConfiguration'
+          - type: 'null'
+          description: API endpoint configuration
+        mcp_client_configuration:
+          anyOf:
+          - $ref: '#/components/schemas/MCPClientConfiguration'
+          - type: 'null'
+          description: MCP client configuration
+        ui_resource:
+          anyOf:
+          - $ref: '#/components/schemas/UIResource'
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Ui Resource
+          description: UI resource object
+        tool_input_schema:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Tool Input Schema
+          description: Tool input schema (JSON Schema format, similar to function input schema)
+        tool_output_schema:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Tool Output Schema
+          description: Tool output schema (JSON Schema format, defining the structure of tool response)
+      type: object
+      required:
+      - tool_name
+      - tool_description
+      - tool_type
+      title: ToolCreate
+      description: 'Schema for creating a new tool (without tool_id).
+
+
+        Note: project_id is optional in the request body since it is provided
+
+        in the URL path. If provided in body, it will be overridden by the path parameter.'
+    ToolUpdate:
+      properties:
+        tool_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          maxLength: 255
+          minLength: 1
+          title: Tool Name
+          description: Name of the tool
+        tool_description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Tool Description
+          description: Description of the tool
+        tool_type:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Tool Type
+          description: Type of the tool
+        status:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Status
+          description: Status of the tool
+        ui_resource:
+          anyOf:
+          - $ref: '#/components/schemas/UIResource'
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Ui Resource
+          description: UI resource object
+        use_temporary_ui_resource:
+          type: boolean
+          default: false
+          title: Use Temporary Ui Resource
+          description: If true, copy temporary_ui_resource to ui_resource during update
+      type: object
+      title: ToolUpdate
+      description: 'Schema for updating a tool.
+
+        Note: The following fields cannot be updated:
+
+        - projectId (immutable)
+
+        - toolId (immutable)
+
+        - api_endpoint_configuration (immutable)
+
+        - mcp_client_configuration (immutable)
+
+        Special: If use_temporary_ui_resource is true, the temporary_ui_resource will be copied to ui_resource.'
+    ToolListResponse:
+      properties:
+        tool_id:
+          type: string
+          title: Tool Id
+          description: Unique identifier for the tool
+        project_id:
+          type: string
+          title: Project Id
+          description: Project ID that the tool belongs to
+        tool_name:
+          type: string
+          title: Tool Name
+          description: Name of the tool
+        tool_description:
+          type: string
+          title: Tool Description
+          description: Truncated description (max 200 chars)
+        tool_type:
+          type: string
+          title: Tool Type
+          description: Type of the tool
+        status:
+          type: string
+          title: Status
+          description: Status of the tool
+      type: object
+      required:
+      - tool_id
+      - project_id
+      - tool_name
+      - tool_description
+      - tool_type
+      - status
+      title: ToolListResponse
+      description: Schema for tool list item (truncated description).
+    ToolResponse:
+      properties:
+        project_id:
+          type: string
+          title: Project Id
+          description: Project ID that the tool belongs to
+        tool_name:
+          type: string
+          maxLength: 255
+          minLength: 1
+          title: Tool Name
+          description: Name of the tool
+        tool_description:
+          type: string
+          title: Tool Description
+          description: Description of the tool
+        tool_type:
+          type: string
+          title: Tool Type
+          description: Type of the tool
+        status:
+          type: string
+          title: Status
+          description: Status of the tool
+          default: active
+        api_endpoint_configuration:
+          anyOf:
+          - $ref: '#/components/schemas/APIEndpointConfiguration'
+          - type: 'null'
+          description: API endpoint configuration
+        mcp_client_configuration:
+          anyOf:
+          - $ref: '#/components/schemas/MCPClientConfiguration'
+          - type: 'null'
+          description: MCP client configuration
+        ui_resource:
+          anyOf:
+          - $ref: '#/components/schemas/UIResource'
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Ui Resource
+          description: UI resource object
+        temporary_ui_resource:
+          anyOf:
+          - $ref: '#/components/schemas/UIResource'
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Temporary Ui Resource
+          description: Temporary UI resource object from chat conversations
+        tool_input_schema:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Tool Input Schema
+          description: Tool input schema (JSON Schema format, similar to function input schema)
+        tool_output_schema:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Tool Output Schema
+          description: Tool output schema (JSON Schema format, defining the structure of tool response)
+        tool_id:
+          type: string
+          title: Tool Id
+          description: Unique identifier for the tool
+      type: object
+      required:
+      - project_id
+      - tool_name
+      - tool_description
+      - tool_type
+      - tool_id
+      title: ToolResponse
+      description: Schema for tool response (includes tool_id).
+    UIResource:
+      properties:
+        type:
+          type: string
+          const: resource
+          title: Type
+        resource:
+          anyOf:
+          - $ref: '#/components/schemas/TextResourceContents'
+          - $ref: '#/components/schemas/BlobResourceContents'
+          title: Resource
+        annotations:
+          anyOf:
+          - $ref: '#/components/schemas/Annotations'
+          - type: 'null'
+      additionalProperties: true
+      type: object
+      required:
+      - type
+      - resource
+      title: UIResource
+      description: Represents a UI resource that can be included in tool results.
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError

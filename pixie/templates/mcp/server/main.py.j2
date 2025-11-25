@@ -1,0 +1,32 @@
+from fastmcp import FastMCP
+from mcp_ui_server import create_ui_resource
+from mcp_ui_server.core import UIResource
+
+{{ pixie_sdk_import }}
+
+# Create FastMCP instance
+mcp = FastMCP("{{ server_name }}")
+
+{% if tool_functions %}
+{% for tool_func in tool_functions %}
+{{ tool_func }}
+
+{% endfor %}
+{% endif %}
+
+if __name__ == "__main__":
+    import os
+    port = int(os.getenv("PORT", 9000))
+    host = os.getenv("HOST", "0.0.0.0")  # Bind to all interfaces for container platforms
+    
+    mcp.settings.port = port
+    mcp.settings.host = host
+    
+    print(f"🚀 Starting MCP server on HTTP (streamable-http transport)")
+    print(f"📡 Server will use streamable-http transport settings")
+    print(f"   Host: {host}")
+    print(f"   Port: {port}")
+    print(f"   Endpoint: http://{host}:{port}/")
+    
+    mcp.run(transport="streamable-http")
+

@@ -1,0 +1,5 @@
+source "https://rubygems.org"
+
+gem "mcp", git: "https://github.com/modelcontextprotocol/ruby-sdk"
+gem "mcp_ui_server", path: "../../sdks/ruby"
+gem "webrick" 

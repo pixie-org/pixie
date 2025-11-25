@@ -1,0 +1,27 @@
+AllCops:
+  NewCops: enable
+  Exclude:
+    - "bin/*"
+    - "vendor/**/*"
+    - "tmp/**/*"
+
+plugins:
+  - rubocop-rake
+  - rubocop-rspec
+
+Style/StringLiterals:
+  EnforcedStyle: single_quotes
+
+Style/Documentation:
+  Enabled: false
+
+Gemspec/DevelopmentDependencies:
+  Enabled: false
+
+Metrics/BlockLength:
+  Exclude:
+    - 'spec/**/*.rb'
+    - '*.gemspec'
+
+RSpec/MultipleExpectations:
+  Enabled: false

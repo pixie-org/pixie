@@ -1,0 +1,250 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 
+ * Design System Theme Definition
+ * 
+ * This file defines the complete design system including colors, shadows, and utility classes.
+ * All colors MUST be in HSL format for consistency and easy manipulation.
+ * 
+ * Theme Colors:
+ * - Primary/Secondary: Lilac (270° hue) - main brand colors
+ * - Accent/Success: Teal Green (172° hue) - highlights and success states
+ * - Emerald: Teal Green variant used for badges and success indicators
+ */
+
+@layer base {
+  :root {
+    /* Light mode - Lilac and Teal Green theme */
+    --background: 270 20% 98%;
+    --foreground: 270 15% 15%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 270 15% 15%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 270 15% 15%;
+
+    /* Primary: Lilac */
+    --primary: 270 60% 58%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Secondary: Soft Blue - complements lilac and teal */
+    --secondary: 210 50% 60%;
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 270 25% 95%;
+    --muted-foreground: 270 10% 50%;
+
+    /* Accent: Teal Green - for highlights */
+    --accent: 172 60% 48%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 270 20% 88%;
+    --input: 270 20% 88%;
+    --ring: 270 60% 58%;
+
+    --radius: 0.75rem;
+
+    --sidebar-background: 270 30% 97%;
+    --sidebar-foreground: 270 15% 25%;
+    --sidebar-primary: 270 60% 58%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 270 50% 80%;
+    --sidebar-accent-foreground: 270 15% 25%;
+    --sidebar-border: 270 20% 85%;
+    --sidebar-ring: 270 60% 58%;
+
+    --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    --shadow-elegant: 0 4px 20px -2px hsl(270 60% 58% / 0.15);
+    
+    /* Success/Active color: Teal Green - used for success states and badges */
+    --success: 172 60% 48%;
+    --success-foreground: 0 0% 100%;
+    
+    /* Emerald: Teal Green variant - used in badge component for success variant */
+    --emerald: 172 60% 48%;
+  }
+
+  .dark {
+    /* Dark mode - Modern, clean professional theme */
+    --background: 240 15% 9%;
+    --foreground: 0 0% 98%;
+
+    --card: 240 12% 13%;
+    --card-foreground: 0 0% 98%;
+
+    --popover: 240 12% 13%;
+    --popover-foreground: 0 0% 98%;
+
+    /* Primary: Lilac - main brand color */
+    --primary: 270 60% 55%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Secondary: Soft Blue - complements lilac and teal */
+    --secondary: 210 45% 50%;
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 240 10% 18%;
+    --muted-foreground: 0 0% 70%;
+
+    /* Accent: Teal Green - for highlights and special elements */
+    --accent: 172 60% 48%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 240 10% 20%;
+    --input: 240 10% 20%;
+    --ring: 270 60% 55%;
+
+    --sidebar-background: 240 15% 7%;
+    --sidebar-foreground: 0 0% 95%;
+    --sidebar-primary: 270 60% 55%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 270 55% 50%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 240 10% 15%;
+    --sidebar-ring: 270 60% 55%;
+
+    --shadow-elegant: 0 8px 32px -4px hsl(270 60% 55% / 0.25);
+    
+    /* Success/Active color: Teal Green - used for success states and badges */
+    --success: 172 60% 48%;
+    --success-foreground: 0 0% 100%;
+    
+    /* Emerald: Teal Green variant - used in badge component for success variant */
+    --emerald: 172 60% 48%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+
+  .dark body {
+    /* Clean, professional dark background - no distracting patterns */
+    background: hsl(var(--background));
+  }
+}
+
+@layer utilities {
+  /* 
+   * Card styling utilities - modern, clean, and professional
+   * Uses subtle shadows and borders for depth without heavy effects
+   */
+  .glass {
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
+    box-shadow: 0 1px 3px 0 hsl(0 0% 0% / 0.1),
+                0 1px 2px -1px hsl(0 0% 0% / 0.1);
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .glass:hover {
+    border-color: hsl(var(--border) / 0.8);
+    box-shadow: 0 4px 12px -2px hsl(0 0% 0% / 0.2),
+                0 2px 4px -2px hsl(0 0% 0% / 0.1);
+  }
+
+  .glass-strong {
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
+    box-shadow: 0 4px 12px -2px hsl(0 0% 0% / 0.15),
+                0 2px 4px -2px hsl(0 0% 0% / 0.1);
+  }
+
+  .glass-subtle {
+    background: hsl(var(--card) / 0.8);
+    border: 1px solid hsl(var(--border) / 0.5);
+    box-shadow: 0 1px 2px 0 hsl(0 0% 0% / 0.05);
+  }
+
+  /* 
+   * Image shadow utilities - adds depth to images with primary color accents
+   * Used in logo and image components throughout the app
+   */
+  .image-shadow {
+    box-shadow: 0 8px 24px 0 hsl(var(--primary) / 0.2),
+                0 4px 12px 0 hsl(var(--foreground) / 0.1),
+                0 0 0 1px hsl(var(--border) / 0.2);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .image-shadow:hover {
+    box-shadow: 0 12px 32px 0 hsl(var(--primary) / 0.25),
+                0 6px 16px 0 hsl(var(--foreground) / 0.15),
+                0 0 0 1px hsl(var(--border) / 0.3);
+    transform: translateY(-2px);
+  }
+
+  .image-shadow-strong {
+    box-shadow: 0 12px 32px 0 hsl(var(--primary) / 0.25),
+                0 6px 16px 0 hsl(var(--foreground) / 0.15),
+                0 0 0 1px hsl(var(--primary) / 0.3);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .image-shadow-strong:hover {
+    box-shadow: 0 16px 40px 0 hsl(var(--primary) / 0.3),
+                0 8px 20px 0 hsl(var(--foreground) / 0.2),
+                0 0 0 1px hsl(var(--primary) / 0.4);
+    transform: translateY(-4px);
+  }
+
+}
+
+/* 
+ * Dark mode specific adjustments
+ * Enhanced shadows and borders for better visibility in dark theme
+ */
+.dark .glass {
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  box-shadow: 0 1px 3px 0 hsl(0 0% 0% / 0.3),
+              0 1px 2px -1px hsl(0 0% 0% / 0.2);
+}
+
+.dark .glass:hover {
+  border-color: hsl(var(--border) / 0.9);
+  box-shadow: 0 4px 12px -2px hsl(0 0% 0% / 0.4),
+              0 2px 4px -2px hsl(0 0% 0% / 0.3);
+}
+
+.dark .glass-strong {
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  box-shadow: 0 4px 12px -2px hsl(0 0% 0% / 0.35),
+              0 2px 4px -2px hsl(0 0% 0% / 0.25);
+}
+
+.dark .glass-subtle {
+  background: hsl(var(--card) / 0.9);
+  border: 1px solid hsl(var(--border) / 0.6);
+  box-shadow: 0 1px 2px 0 hsl(0 0% 0% / 0.2);
+}
+
+/* Shimmer animation for magic effects */
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.animate-shimmer {
+  animation: shimmer 2s infinite;
+}
+

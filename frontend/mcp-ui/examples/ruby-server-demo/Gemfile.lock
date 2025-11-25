@@ -1,0 +1,37 @@
+GIT
+  remote: https://github.com/modelcontextprotocol/ruby-sdk
+  revision: e4d5f1957465687f1a85c0a001c8739177c3f560
+  specs:
+    mcp (0.2.0)
+      json-schema (>= 4.1)
+      json_rpc_handler (~> 0.1)
+
+PATH
+  remote: ../../sdks/ruby
+  specs:
+    mcp_ui_server (0.1.0)
+
+GEM
+  remote: https://rubygems.org/
+  specs:
+    addressable (2.8.7)
+      public_suffix (>= 2.0.2, < 7.0)
+    bigdecimal (3.2.2)
+    json-schema (5.2.1)
+      addressable (~> 2.8)
+      bigdecimal (~> 3.1)
+    json_rpc_handler (0.1.1)
+    public_suffix (6.0.2)
+    webrick (1.9.1)
+
+PLATFORMS
+  arm64-darwin-24
+  ruby
+
+DEPENDENCIES
+  mcp!
+  mcp_ui_server!
+  webrick
+
+BUNDLED WITH
+   2.6.9

@@ -1,0 +1,3 @@
+[submodule "mcp-ui"]
+	path = mcp-ui
+	url = https://github.com/idosal/mcp-ui

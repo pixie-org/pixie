@@ -1,0 +1,496 @@
+/**
+ * Custom styles for MCP UI documentation
+ * These styles enhance the default VitePress theme
+ */
+
+/* CSS Variables for consistent theming */
+:root {
+  --vp-c-brand-1: #3c82f6;
+  --vp-c-brand-2: #2563eb;
+  --vp-c-brand-3: #1d4ed8;
+  --vp-c-brand-soft: rgba(60, 130, 246, 0.14);
+  --vp-c-brand-softer: rgba(60, 130, 246, 0.08);
+
+  /* Custom accent colors */
+  --vp-c-accent-1: #10b981;
+  --vp-c-accent-2: #059669;
+  --vp-c-accent-soft: rgba(16, 185, 129, 0.14);
+
+  /* Enhanced typography */
+  --vp-font-family-base:
+    'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu',
+    'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+  --vp-font-family-mono: 'JetBrains Mono', 'Fira Code', 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+
+  /* Custom shadows */
+  --vp-shadow-1: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --vp-shadow-2: 0 3px 12px rgba(0, 0, 0, 0.07);
+  --vp-shadow-3: 0 12px 32px rgba(0, 0, 0, 0.1);
+  --vp-shadow-4: 0 14px 44px rgba(0, 0, 0, 0.12);
+  --vp-shadow-5: 0 18px 56px rgba(0, 0, 0, 0.16);
+
+  /* Custom sidebar spacing */
+  --vp-sidebar-width: 310px;
+  --active-item-left-padding: 8px;
+  --items-left-padding: 18px;
+}
+
+/* Dark mode adjustments */
+.dark {
+  --vp-c-brand-1: #60a5fa;
+  --vp-c-brand-2: #3b82f6;
+  --vp-c-brand-3: #2563eb;
+  --vp-c-brand-soft: rgba(96, 165, 250, 0.16);
+  --vp-c-brand-softer: rgba(96, 165, 250, 0.1);
+
+  --vp-c-accent-1: #34d399;
+  --vp-c-accent-2: #10b981;
+  --vp-c-accent-soft: rgba(52, 211, 153, 0.16);
+}
+
+/* Fix top bar overlap - Enhanced hero section */
+.VPHero {
+  padding-top: 120px !important;
+  padding-bottom: 64px !important;
+}
+
+.VPHome {
+  margin-bottom: 16px !important;
+}
+
+.VPHero .container {
+  margin-top: 0 !important;
+}
+
+.VPHero .name {
+  background: linear-gradient(
+    -45deg,
+    #3b82f6 0%,
+    #10b981 25%,
+    #8b5cf6 50%,
+    #3b82f6 75%,
+    #10b981 100%
+  );
+  background-size: 400% 400%;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  animation: gradientShift 10s ease-in-out infinite;
+}
+
+.VPHero .text {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.VPHero .tagline {
+  font-size: 1.25rem;
+  line-height: 1.6;
+  color: var(--vp-c-text-2);
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+/* Animated gradient keyframes */
+@keyframes gradientShift {
+  0%,
+  100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+/* Animated gradient text utility class */
+.animated-gradient-text {
+  background: linear-gradient(
+    -45deg,
+    #3b82f6 0%,
+    #10b981 25%,
+    #8b5cf6 50%,
+    #3b82f6 75%,
+    #10b981 100%
+  );
+  background-size: 400% 400%;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: gradientShift 10s ease-in-out infinite;
+}
+
+/* Enhanced feature cards */
+.VPFeatures {
+  padding-top: 48px;
+  padding-bottom: 48px;
+}
+
+.VPFeature {
+  background: var(--vp-c-bg-soft);
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 12px;
+  padding: 28px;
+  height: 100%;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.VPFeature::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--vp-c-brand-1), var(--vp-c-accent-1));
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.VPFeature:hover {
+  border-color: var(--vp-c-brand-1);
+  box-shadow: var(--vp-shadow-3);
+  transform: translateY(-2px);
+}
+
+.VPFeature:hover::before {
+  opacity: 1;
+}
+
+/* Fix feature card icons - target the correct VitePress classes */
+.VPFeature .icon,
+.VPFeature .VPImage,
+.VPFeature .box .icon {
+  font-size: 2.5rem !important;
+  line-height: 1 !important;
+  margin-bottom: 16px !important;
+  display: block !important;
+  text-align: center !important;
+  width: 100% !important;
+  height: auto !important;
+}
+
+/* Ensure emoji icons are properly sized */
+.VPFeature .box .icon {
+  font-size: 2.5rem !important;
+  line-height: 1.2 !important;
+  margin: 0 0 16px 0 !important;
+  padding: 0 !important;
+  position: static !important;
+  top: auto !important;
+  left: auto !important;
+  transform: none !important;
+}
+
+.VPFeature .title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin-bottom: 12px;
+  color: var(--vp-c-text-1);
+}
+
+.VPFeature .details {
+  color: var(--vp-c-text-2);
+  line-height: 1.6;
+  font-size: 0.95rem;
+}
+
+/* Enhanced code blocks */
+.vp-code-group {
+  margin: 24px 0;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: var(--vp-shadow-2);
+}
+
+div[class*='language-'] {
+  border-radius: 8px;
+  margin: 16px 0;
+  overflow: hidden;
+  box-shadow: var(--vp-shadow-2);
+}
+
+div[class*='language-'] pre {
+  padding: 20px 24px;
+  background: var(--vp-code-bg);
+  overflow-x: auto;
+}
+
+div[class*='language-'] code {
+  font-family: var(--vp-font-family-mono);
+  font-size: 0.9em;
+  line-height: 1.7;
+}
+
+/* Enhanced buttons and links */
+.VPButton {
+  border-radius: 8px;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  box-shadow: var(--vp-shadow-1);
+}
+
+.VPButton:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--vp-shadow-2);
+}
+
+.VPButton.brand {
+  background: linear-gradient(135deg, var(--vp-c-brand-1), var(--vp-c-brand-2));
+  border: none;
+}
+
+.VPButton.brand:hover {
+  background: linear-gradient(135deg, var(--vp-c-brand-2), var(--vp-c-brand-3));
+}
+
+/* Enhanced navigation */
+.VPNavBar {
+  backdrop-filter: blur(12px);
+  background: rgba(255, 255, 255, 0.85);
+  border-bottom: 1px solid var(--vp-c-divider);
+  box-shadow: var(--vp-shadow-1);
+}
+
+.dark .VPNavBar {
+  background: rgba(26, 26, 26, 0.85);
+}
+
+/* Enhanced sidebar */
+.VPSidebar {
+  background: var(--vp-c-bg-soft);
+  border-right: 1px solid var(--vp-c-divider);
+}
+
+
+.VPSidebarItem[class*="level-"]:not(.level-0) .items {
+  padding-left: var(--items-left-padding) !important;
+}
+
+.VPSidebarItem.level-0 > .item > .link {
+  font-weight: 600;
+  color: var(--vp-c-text-1);
+}
+
+.VPSidebarItem.is-active > .item > .indicator {
+  left: calc(calc(var(--items-left-padding) * -1) - 1px);
+}
+
+.VPSidebarItem.is-active > .item > .link {
+  background: var(--vp-c-brand-soft);
+  color: var(--vp-c-brand-1);
+  border-radius: 6px;
+  padding-left: var(--active-item-left-padding);
+  margin-left: calc(var(--active-item-left-padding) * -1);
+}
+
+/* Enhanced content area */
+.VPContent {
+  padding-top: 32px;
+}
+
+.vp-doc h1 {
+  font-size: 2.5rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  margin-bottom: 24px;
+  margin-top: 24px;
+  background: linear-gradient(135deg, var(--vp-c-text-1) 0%, var(--vp-c-brand-1) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.vp-doc h2 {
+  font-size: 1.875rem;
+  font-weight: 700;
+  margin-top: 12px;
+  margin-bottom: 16px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid var(--vp-c-divider);
+}
+
+.vp-doc h3 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin-top: 32px;
+  margin-bottom: 12px;
+  color: var(--vp-c-brand-1);
+}
+
+.vp-doc p {
+  line-height: 1.7;
+  margin: 16px 0;
+}
+
+.vp-doc a {
+  color: var(--vp-c-brand-1);
+  text-decoration: none;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.vp-doc a:hover {
+  color: var(--vp-c-brand-2);
+  text-decoration: underline;
+}
+
+/* Enhanced tables */
+.vp-doc table {
+  border-collapse: collapse;
+  margin: 24px 0;
+  width: 100%;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: var(--vp-shadow-2);
+}
+
+.vp-doc th {
+  background: var(--vp-c-bg-soft);
+  font-weight: 600;
+  padding: 16px;
+  text-align: left;
+  border-bottom: 2px solid var(--vp-c-divider);
+}
+
+.vp-doc td {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--vp-c-divider-light);
+}
+
+.vp-doc tr:hover {
+  background: var(--vp-c-bg-softer);
+}
+
+/* Enhanced blockquotes */
+.vp-doc blockquote {
+  border-left: 4px solid var(--vp-c-brand-1);
+  background: var(--vp-c-brand-softer);
+  padding: 16px 20px;
+  margin: 24px 0;
+  border-radius: 0 8px 8px 0;
+}
+
+.vp-doc blockquote p {
+  margin: 0;
+  color: var(--vp-c-text-2);
+  font-style: italic;
+}
+
+/* Enhanced badges */
+.vp-doc .badge {
+  display: inline-block;
+  background: var(--vp-c-brand-soft);
+  color: var(--vp-c-brand-1);
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  margin-left: 8px;
+}
+
+/* Custom utility classes */
+.text-gradient {
+  background: linear-gradient(135deg, var(--vp-c-brand-1), var(--vp-c-accent-1));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.card {
+  background: var(--vp-c-bg-soft);
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 12px;
+  padding: 24px;
+  margin: 16px 0;
+  transition: all 0.3s ease;
+}
+
+.card:hover {
+  border-color: var(--vp-c-brand-1);
+  box-shadow: var(--vp-shadow-2);
+}
+
+/* Responsive improvements */
+@media (max-width: 768px) {
+  .VPHero {
+    padding-top: 60px !important;
+    padding-bottom: 48px !important;
+  }
+
+  .VPHero .name {
+    font-size: 2.5rem;
+  }
+
+  .VPHero .text {
+    font-size: 1.5rem;
+  }
+
+  .VPHero .tagline {
+    font-size: 1.125rem;
+  }
+
+  .vp-doc h1 {
+    font-size: 2rem;
+  }
+
+  .vp-doc h2 {
+    font-size: 1.5rem;
+  }
+
+  .VPFeature {
+    padding: 20px;
+  }
+
+  .VPFeature .icon,
+  .VPFeature .VPImage,
+  .VPFeature .box .icon {
+    font-size: 2rem !important;
+  }
+
+  /* Responsive animated gradient text */
+  .animated-gradient-text {
+    font-size: 2.5rem !important;
+    line-height: 1.1 !important;
+    margin-bottom: 1.5rem !important;
+  }
+}
+
+/* Animation enhancements */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.VPFeature {
+  animation: fadeInUp 0.6s ease-out;
+}
+
+.VPFeature:nth-child(1) {
+  animation-delay: 0.1s;
+}
+.VPFeature:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.VPFeature:nth-child(3) {
+  animation-delay: 0.3s;
+}
+.VPFeature:nth-child(4) {
+  animation-delay: 0.4s;
+}
+.VPFeature:nth-child(5) {
+  animation-delay: 0.5s;
+}
+.VPFeature:nth-child(6) {
+  animation-delay: 0.6s;
+}

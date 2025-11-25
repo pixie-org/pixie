@@ -1,0 +1,297 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - alpha
+  pull_request:
+    branches:
+      - main
+      - alpha
+  release:
+    types: [published]
+
+jobs:
+  filter_changed_paths:
+    runs-on: ubuntu-latest
+    outputs:
+      ts_client_files: ${{ steps.filter.outputs.ts_client_files }}
+      ts_server_files: ${{ steps.filter.outputs.ts_server_files }}
+      ruby_sdk_files: ${{ steps.filter.outputs.ruby_sdk_files }}
+      python_sdk_files: ${{ steps.filter.outputs.python_sdk_files }}
+      example_files: ${{ steps.filter.outputs.example_files }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: dorny/paths-filter@v2
+        id: filter
+        with:
+          base: ${{ github.event_name == 'push' && github.event.before || github.base_ref }}
+          filters: |
+            ts_client_files:
+              - 'sdks/typescript/client/**'
+            ts_server_files:
+              - 'sdks/typescript/server/**'
+            ruby_sdk_files:
+              - 'sdks/ruby/**'
+            python_sdk_files:
+              - 'sdks/python/**'
+            example_files:
+              - 'examples/**'
+
+  js_build_and_test:
+    needs: filter_changed_paths
+    if: needs.filter_changed_paths.outputs.ts_client_files == 'true' || needs.filter_changed_paths.outputs.ts_server_files == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Test
+        run: pnpm test:ts
+
+      - name: Build
+        run: pnpm build
+
+  ruby_sdk_test:
+    needs: filter_changed_paths
+    if: needs.filter_changed_paths.outputs.ruby_sdk_files == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
+          bundler: latest
+          bundler-cache: true
+          working-directory: 'sdks/ruby'
+
+      - name: Lint
+        run: bundle exec rubocop
+        working-directory: 'sdks/ruby'
+
+      - name: Run tests
+        run: pnpm test:ruby
+
+  python_sdk_test:
+    needs: filter_changed_paths
+    if: needs.filter_changed_paths.outputs.python_sdk_files == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --dev
+        working-directory: sdks/python/server
+
+      - name: Lint with ruff
+        run: uv run ruff check
+        working-directory: sdks/python/server
+
+      - name: Type check with pyright
+        run: uv run pyright
+        working-directory: sdks/python/server
+
+      - name: Run tests
+        run: uv run pytest
+        working-directory: sdks/python/server
+
+      - name: Build package
+        run: uv build
+        working-directory: sdks/python/server
+
+  release_ts_client:
+    needs: [js_build_and_test, filter_changed_paths]
+    if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/alpha') && needs.filter_changed_paths.outputs.ts_client_files == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - name: Fetch all tags
+        run: git fetch --tags --force
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with: { version: 10 }
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with: { node-version: 22.x, cache: 'pnpm' }
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Release
+        working-directory: sdks/typescript/client
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npx semantic-release
+
+  release_ts_server:
+    needs: [js_build_and_test, release_ts_client, filter_changed_paths]
+    if: >
+      always() &&
+      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/alpha') &&
+      needs.filter_changed_paths.outputs.ts_server_files == 'true' &&
+      needs.js_build_and_test.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - name: Pull latest changes
+        run: git pull --rebase origin ${{ github.ref_name }}
+      - name: Fetch all tags
+        run: git fetch --tags --force
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with: { version: 10 }
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with: { node-version: 22.x, cache: 'pnpm' }
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Release
+        working-directory: sdks/typescript/server
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npx semantic-release
+
+  release_ruby_sdk:
+    name: Release Ruby SDK
+    needs: [ruby_sdk_test, filter_changed_paths, release_ts_server]
+    if: >
+      always() &&
+      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/alpha') &&
+      needs.filter_changed_paths.outputs.ruby_sdk_files == 'true' &&
+      needs.ruby_sdk_test.result == 'success'
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: write # to push commits and tags
+      id-token: write # for trusted publishing
+      issues: write # to comment on issues
+      pull-requests: write # to comment on pull requests
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - name: Pull latest changes
+        run: git pull --rebase origin ${{ github.ref_name }}
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with: { version: 10 }
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with: { node-version: 22.x, cache: 'pnpm' }
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
+          bundler: latest
+          bundler-cache: true
+          working-directory: sdks/ruby
+      - name: Configure RubyGems Credentials
+        uses: rubygems/configure-rubygems-credentials@main
+      - name: Release
+        working-directory: sdks/ruby
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx semantic-release
+
+  release_python_sdk:
+    name: Release Python SDK
+    needs: [python_sdk_test, filter_changed_paths, release_ruby_sdk]
+    if: >
+      always() &&
+      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/alpha') &&
+      needs.filter_changed_paths.outputs.python_sdk_files == 'true' &&
+      needs.python_sdk_test.result == 'success'
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: write # to push commits and tags
+      id-token: write # for trusted publishing to PyPI
+      issues: write # to comment on issues
+      pull-requests: write # to comment on pull requests
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - name: Pull latest changes
+        run: git pull --rebase origin ${{ github.ref_name }}
+      - name: Fetch all tags
+        run: git fetch --tags --force
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with: { version: 10 }
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with: { node-version: 22.x, cache: 'pnpm' }
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+      - name: Install Python dependencies
+        run: uv sync --dev
+        working-directory: sdks/python/server
+      - name: Release
+        working-directory: sdks/python/server
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx semantic-release

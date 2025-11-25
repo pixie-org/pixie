@@ -1,0 +1,14 @@
+{
+  "name": "pixie",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "cd pixie && uvicorn app.main:app --reload",
+    "dev:frontend": "cd frontend && pnpm dev"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
+
