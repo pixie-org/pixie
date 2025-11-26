@@ -1,28 +1,36 @@
 import { useState, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Wrench, Sparkles, ArrowRight, Download, Plus } from "lucide-react";
 import { listTools } from "@/lib/api/tools";
 import { listWidgets } from "@/lib/api/widgets";
-import { DEFAULT_PROJECT_ID } from "@/lib/api/client";
+import { useProject } from "@/contexts/ProjectContext";
+import { ProjectSelector } from "@/components/ProjectSelector";
 
 const Index = () => {
   const navigate = useNavigate();
+  const { projectId: urlProjectId } = useParams<{ projectId: string }>();
+  const { selectedProject, isLoading: isLoadingProjects } = useProject();
   const [hasTools, setHasTools] = useState<boolean | null>(null);
   const [hasWidgets, setHasWidgets] = useState<boolean | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const checkData = async () => {
+      if (!selectedProject) {
+        setIsLoading(false);
+        return;
+      }
+
       try {
         setIsLoading(true);
         // Check if tools exist
-        const tools = await listTools(DEFAULT_PROJECT_ID);
+        const tools = await listTools(selectedProject.id);
         setHasTools(tools.length > 0);
 
         // Check if widgets exist
-        const widgetsResponse = await listWidgets(1, 0);
+        const widgetsResponse = await listWidgets(selectedProject.id, 1, 0);
         setHasWidgets(widgetsResponse.total > 0);
       } catch (error) {
         console.error("Failed to check tools and widgets:", error);
@@ -34,18 +42,31 @@ const Index = () => {
     };
 
     checkData();
-  }, []);
+  }, [selectedProject]);
 
-  const handleImportTool = () => {
-    navigate("/toolkits");
-  };
+  if (isLoadingProjects) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh]">
+        <p className="text-muted-foreground">Loading...</p>
+      </div>
+    );
+  }
 
-  const handleCreateWidget = () => {
-    navigate("/widgets/create");
-  };
+  if (!selectedProject) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-4">
+        <h1 className="text-2xl font-bold">No Project Selected</h1>
+        <p className="text-muted-foreground">Please select a project to continue.</p>
+        <ProjectSelector />
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-8">
+      <div className="w-full max-w-2xl flex justify-end mb-4">
+        <ProjectSelector />
+      </div>
       <div className="space-y-4 text-center">
         <h1 className="text-5xl font-bold tracking-tight text-foreground">
           Welcome to Pixie
@@ -53,12 +74,17 @@ const Index = () => {
         <p className="text-xl text-muted-foreground max-w-2xl">
           Create MCP apps easily
         </p>
+        {selectedProject && (
+          <p className="text-sm text-muted-foreground">
+            Project: <span className="font-medium">{selectedProject.name}</span>
+          </p>
+        )}
       </div>
 
       <div className="flex flex-col sm:flex-row gap-6 w-full max-w-2xl">
         {/* Tools Button */}
         <Card className="flex-1 transition-all hover:shadow-lg hover:-translate-y-1 cursor-pointer group">
-          <Link to="/toolkits" className="block h-full">
+          <Link to={`/projects/${urlProjectId || selectedProject?.id || ''}/toolkits`} className="block h-full">
             <CardHeader className="text-center pb-4">
               <div className="flex justify-center mb-4">
                 <div className="p-4 rounded-full bg-primary/10 group-hover:bg-primary/20 transition-colors">
@@ -89,7 +115,7 @@ const Index = () => {
                         className="w-full mt-3 hover:bg-accent/10 hover:text-foreground hover:border-primary/60"
                         onClick={(e) => {
                           e.preventDefault();
-                          handleImportTool();
+                          navigate(`/projects/${urlProjectId || selectedProject?.id || ''}/toolkits`);
                         }}
                       >
                         Import Tool
@@ -104,7 +130,7 @@ const Index = () => {
 
         {/* Widgets Button */}
         <Card className="flex-1 transition-all hover:shadow-lg hover:-translate-y-1 cursor-pointer group">
-          <Link to="/widgets" className="block h-full">
+          <Link to={`/projects/${urlProjectId || selectedProject?.id || ''}/widgets`} className="block h-full">
             <CardHeader className="text-center pb-4">
               <div className="flex justify-center mb-4">
                 <div className="p-4 rounded-full bg-accent/10 group-hover:bg-accent/20 transition-colors">
@@ -135,7 +161,7 @@ const Index = () => {
                         className="w-full mt-3 hover:bg-accent/10 hover:text-foreground hover:border-primary/60"
                         onClick={(e) => {
                           e.preventDefault();
-                          handleCreateWidget();
+                          navigate(`/projects/${urlProjectId || selectedProject?.id || ''}/widgets/create`);
                         }}
                       >
                         Create Widget

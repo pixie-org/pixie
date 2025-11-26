@@ -21,4 +21,5 @@ class Design(BaseModel):
     content_type: str = Field(..., description="MIME type of the file (e.g., image/png, image/jpeg)")
     file_data: bytes = Field(..., description="Binary file data")
     file_size: int = Field(..., description="Size of the file in bytes")
+    project_id: str = Field(..., description="Project ID that the design belongs to")
 

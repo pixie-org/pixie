@@ -30,12 +30,14 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { ArrowLeft, Trash2 } from "lucide-react";
-import { getToolkit, listToolkitTools, getToolDetail, deleteToolDetail, enableTool, disableTool, deleteToolkit, getToolkitSource, DEFAULT_PROJECT_ID, type ToolkitDetail, ToolDetailResponse, type ToolkitSourceDetail } from "@/lib/api";
+import { getToolkit, listToolkitTools, getToolDetail, deleteToolDetail, enableTool, disableTool, deleteToolkit, getToolkitSource, type ToolkitDetail, ToolDetailResponse, type ToolkitSourceDetail } from "@/lib/api";
+import { useProject } from "@/contexts/ProjectContext";
 import type { Tool } from "@/components/ToolsList";
 
 const ToolkitDetail = () => {
-  const { toolkitId } = useParams<{ toolkitId: string }>();
+  const { toolkitId, projectId: urlProjectId } = useParams<{ toolkitId: string; projectId: string }>();
   const navigate = useNavigate();
+  const { getCurrentProjectId } = useProject();
   const [toolkit, setToolkit] = useState<ToolkitDetail | null>(null);
   const [tools, setTools] = useState<Tool[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -59,6 +61,7 @@ const ToolkitDetail = () => {
   const [sourceDetails, setSourceDetails] = useState<ToolkitSourceDetail | null>(null);
   const [isLoadingSourceDetails, setIsLoadingSourceDetails] = useState(false);
   const [sourceDetailsError, setSourceDetailsError] = useState<string | null>(null);
+  const projectId = urlProjectId as string;
 
   useEffect(() => {
     const fetchToolkit = async () => {
@@ -67,7 +70,7 @@ const ToolkitDetail = () => {
       try {
         setIsLoading(true);
         setError(null);
-        const toolkitData = await getToolkit(toolkitId);
+        const toolkitData = await getToolkit(toolkitId, projectId);
         setToolkit(toolkitData);
       } catch (err: any) {
         setError(err.message || "Failed to load toolkit");
@@ -78,7 +81,7 @@ const ToolkitDetail = () => {
     };
 
     fetchToolkit();
-  }, [toolkitId]);
+  }, [toolkitId, urlProjectId]);
 
   useEffect(() => {
     const fetchTools = async () => {
@@ -87,7 +90,7 @@ const ToolkitDetail = () => {
       try {
         setIsLoadingTools(true);
         setToolsError(null);
-        const toolsData = await listToolkitTools(toolkitId);
+        const toolsData = await listToolkitTools(toolkitId, projectId);
         setTools(toolsData);
       } catch (err: any) {
         setToolsError(err.message || "Failed to load tools");
@@ -100,7 +103,7 @@ const ToolkitDetail = () => {
     if (toolkitId) {
       fetchTools();
     }
-  }, [toolkitId]);
+  }, [toolkitId, urlProjectId]);
 
   const formatDate = (dateString: string | null) => {
     if (!dateString) return "N/A";
@@ -113,7 +116,7 @@ const ToolkitDetail = () => {
   };
 
   const handleBack = () => {
-    navigate("/toolkits");
+    navigate(`/projects/${projectId}/toolkits`);
   };
 
   const handleToolClick = (toolId: string) => {
@@ -131,7 +134,7 @@ const ToolkitDetail = () => {
       setToolDetailsError(null);
 
       try {
-        const details = await getToolDetail(selectedToolId);
+        const details = await getToolDetail(selectedToolId, projectId);
         setToolDetails(details);
       } catch (err: any) {
         setToolDetailsError(err.message || "Failed to load tool details");
@@ -142,7 +145,7 @@ const ToolkitDetail = () => {
     };
 
     fetchToolDetails();
-  }, [selectedToolId, isToolDialogOpen]);
+  }, [selectedToolId, isToolDialogOpen, urlProjectId]);
 
   const handleDeleteClick = () => {
     setShowDeleteConfirm(true);
@@ -155,10 +158,10 @@ const ToolkitDetail = () => {
     setDeleteError(null);
 
     try {
-      await deleteToolDetail(selectedToolId);
+      await deleteToolDetail(selectedToolId, projectId);
 
       if (toolkitId) {
-        const toolsData = await listToolkitTools(toolkitId);
+        const toolsData = await listToolkitTools(toolkitId, projectId);
         setTools(toolsData);
       }
 
@@ -185,12 +188,12 @@ const ToolkitDetail = () => {
 
     try {
       if (toolDetails.is_enabled) {
-        await disableTool(selectedToolId);
+        await disableTool(selectedToolId, projectId);
       } else {
-        await enableTool(selectedToolId);
+        await enableTool(selectedToolId, projectId);
       }
 
-      const updatedDetails = await getToolDetail(selectedToolId);
+      const updatedDetails = await getToolDetail(selectedToolId, projectId);
       setToolDetails(updatedDetails);
     } catch (error: any) {
       setToggleError(error.message || "Failed to toggle tool status");
@@ -220,10 +223,11 @@ const ToolkitDetail = () => {
     setDeleteToolkitError(null);
 
     try {
-      await deleteToolkit(toolkitId);
+      const projectId = urlProjectId || getCurrentProjectId();
+      await deleteToolkit(toolkitId, projectId);
 
       // Navigate back to toolkits list
-      navigate("/toolkits");
+      navigate(`/projects/${projectId}/toolkits`);
     } catch (error: any) {
       setDeleteToolkitError(error.message || "Failed to delete toolkit");
       console.error("Failed to delete toolkit:", error);
@@ -252,7 +256,7 @@ const ToolkitDetail = () => {
       setSourceDetailsError(null);
 
       try {
-        const details = await getToolkitSource(toolkit.toolkit_source.id);
+        const details = await getToolkitSource(toolkit.toolkit_source.id, projectId);
         setSourceDetails(details);
       } catch (err: any) {
         setSourceDetailsError(err.message || "Failed to load source details");
@@ -263,7 +267,7 @@ const ToolkitDetail = () => {
     };
 
     fetchSourceDetails();
-  }, [toolkit?.toolkit_source?.id, isSourceDialogOpen]);
+  }, [toolkit?.toolkit_source?.id, isSourceDialogOpen, urlProjectId]);
 
   if (isLoading) {
     return (
@@ -624,10 +628,12 @@ const ToolkitDetail = () => {
                 </p>
               </div>
 
-              {(sourceDetails.configuration.server_url ||
+              {Boolean(
+                sourceDetails.configuration.server_url ||
                 sourceDetails.configuration.transport ||
                 sourceDetails.configuration.credentials !== undefined ||
-                sourceDetails.configuration.openapi_spec) && (
+                (sourceDetails.configuration as any).openapi_spec
+              ) && (
                   <div className="space-y-2">
                     <Label className="text-sm font-medium">Configuration</Label>
                     <div className="rounded-lg border bg-muted/50 p-4 space-y-3">

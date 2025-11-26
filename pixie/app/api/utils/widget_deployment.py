@@ -3,7 +3,7 @@ import shutil
 import tempfile
 from pathlib import Path
 
-from app.db.models.widgets import Widget, WidgetDeploymentTypeEnum
+from app.db.models.widgets import Widget
 from app.db.storage.mcp_tool_repository import McpToolRepository
 from app.db.storage.tool_widget_repository import ToolWidgetRepository
 from app.db.storage.ui_widget_resource_repository import UiWidgetResourceRepository
@@ -29,17 +29,17 @@ def generate_tool_functions(widget: Widget, server_type: WidgetServerTypeEnum) -
     tool_functions = []
     tool_repo = McpToolRepository()
     tool_widget_repo = ToolWidgetRepository()
-    tool_widgets = tool_widget_repo.get_by_widget_id(widget.id)
+    # Use widget's project_id for filtering
+    tool_widgets = tool_widget_repo.get_by_widget_id(widget.id, project_id=widget.project_id)
     for tool_widget in tool_widgets:
         tool_id = tool_widget.tool_id
-        tool = tool_repo.get_by_id(tool_id)
-        print(tool)
+        tool = tool_repo.get_by_id(tool_id, widget.project_id)
         if not tool:
             raise ValueError(f"Tool with ID {tool_id} not found")
 
-        tool_functions.append(generate_mcp_tool_function_from_tool_id(tool_id, server_type=server_type))
+        tool_functions.append(generate_mcp_tool_function_from_tool_id(tool_id, widget.project_id, server_type=server_type))
     
-    tool_functions.append(generate_mcp_tool_function_from_widget_id(widget.id, server_type=server_type))
+    tool_functions.append(generate_mcp_tool_function_from_widget_id(widget.id, widget.project_id, server_type=server_type))
     return tool_functions
 
 
@@ -57,18 +57,23 @@ def generate_all_requirements(widget: Widget, server_type: WidgetServerTypeEnum)
         "asyncio"
     ]
 
-def create_deployment(widget_id: str, server_type: WidgetServerTypeEnum = WidgetServerTypeEnum.OPENAI) -> tuple[Path, WidgetDeploymentTypeEnum]:
+def create_deployment(widget_id: str, project_id: str, server_type: WidgetServerTypeEnum = WidgetServerTypeEnum.OPENAI) -> Path:
     """
     Create a widget deployment bundle by generating server files and packaging them as a zip archive.
     
     Args:
         widget_id: The widget ID to package
+        project_id: The project ID that the widget belongs to (required for project-scoped access)
+        server_type: The type of server to generate (default: OPENAI)
     
     Returns:
-        Tuple of (archive_path, working_directory, deployment_type)
+        Path to the created zip archive file
+    
+    Raises:
+        ValueError: If widget is not found
     """
     widget_repo = WidgetRepository()
-    widget = widget_repo.get_by_id(widget_id)
+    widget = widget_repo.get_by_id(widget_id, project_id=project_id)
     if not widget:
         raise ValueError(f"Widget with ID {widget_id} not found")
 
@@ -165,5 +170,4 @@ class ApiClient:
     archive_path = Path(archive_path_str)
     logger.info(f"📦 Created deployment archive: {archive_path}")
 
-    deployment_type = WidgetDeploymentTypeEnum.LOCAL
-    return archive_path, deployment_type
+    return archive_path

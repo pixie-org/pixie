@@ -9,10 +9,50 @@ from typing import AsyncGenerator
 from fastapi import FastAPI
 
 from app.api.public import api_router
+from app.server.auth_middleware import GUEST_USER_ID
 from app.server.config import get_settings
 from app.server.middleware import setup_middleware
 
 settings = get_settings()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    """Lifespan context manager for startup and shutdown tasks."""
+    # Startup: Initialize guest user if guest mode is enabled
+    if settings.guest_mode_enabled:
+        try:
+            from app.db.models.users import User
+            from app.db.storage.user_repository import UserRepository
+            from app.server.project_access import ensure_default_project
+            
+            user_repo = UserRepository()
+            try:
+                # Check if guest user exists
+                user_repo.get_by_id(GUEST_USER_ID)
+            except Exception:
+                # Create guest user if it doesn't exist
+                guest_user = User(
+                    id=GUEST_USER_ID,
+                    email="guest@pixie.local",
+                    name="Guest User",
+                    avatar_url=None,
+                    waitlisted=False,  # Guest users are not waitlisted
+                )
+                user_repo.create_or_update(guest_user)
+                logging.getLogger(__name__).info("Guest user initialized")
+                try:
+                    ensure_default_project(GUEST_USER_ID)
+                    logging.getLogger(__name__).info("Default project ensured for guest user")
+                except Exception as e:
+                    logging.getLogger(__name__).warning(f"Failed to ensure default project for guest user: {e}")
+        except Exception as e:
+            logging.getLogger(__name__).warning(f"Failed to initialize guest user: {e}")
+    
+    yield
+    
+    # Shutdown tasks (if any)
+    pass
 
 
 def setup_logging() -> None:
@@ -87,7 +127,11 @@ def create_application() -> FastAPI:
     app = FastAPI(
         title=settings.app_name,
         version=settings.version,
-        debug=settings.debug
+        debug=settings.debug,
+        lifespan=lifespan,
+        docs_url=None,  # Disable /docs
+        redoc_url=None,  # Disable /redoc
+        openapi_url=None,  # Disable /openapi.json
     )
 
     # Setup middleware

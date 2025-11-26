@@ -2,7 +2,7 @@
 import secrets
 from logging import getLogger
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import FileResponse
 
 from app.api.core.llm_chat import LlmChat
@@ -12,8 +12,6 @@ from app.api.models.widgets import (
     UiWidgetResourceResponse,
     UiWidgetResourceUpdate,
     WidgetCreate,
-    WidgetDeploymentListResponse,
-    WidgetDeploymentResponse,
     WidgetListItem,
     WidgetListResponse,
     WidgetResponse,
@@ -22,23 +20,18 @@ from app.api.models.widgets import (
 )
 from app.api.utils.llm_check import require_llm_keys
 from app.api.utils.widget_deployment import create_deployment
-from app.db.models.widgets import (
-    UiWidgetResource,
-    Widget,
-    WidgetDeployment,
-    WidgetDeploymentStatusEnum,
-)
+from app.db.models.widgets import UiWidgetResource, Widget
 from app.db.storage.mcp_tool_repository import McpToolRepository
 from app.db.storage.tool_widget_repository import ToolWidgetRepository
 from app.db.storage.ui_widget_resource_repository import UiWidgetResourceRepository
 from app.db.storage.widget_chat_repository import WidgetChatRepository
-from app.db.storage.widget_deployment_repository import WidgetDeploymentRepository
 from app.db.storage.widget_repository import WidgetRepository
 from app.server.exceptions import NotFoundError
+from app.server.project_access import verify_project_id_path
 
 logger = getLogger(__name__)
 
-router = APIRouter(prefix="", tags=["widgets"])
+router = APIRouter(prefix="/projects/{project_id}", tags=["widgets"])
 
 
 def _generate_id() -> str:
@@ -51,7 +44,10 @@ def _generate_id() -> str:
     status_code=status.HTTP_200_OK,
     summary="Create a widget",
 )
-def create_widget(widget_data: WidgetCreate) -> dict:
+def create_widget(
+    widget_data: WidgetCreate,
+    project_id: str = Depends(verify_project_id_path),
+) -> dict:
     """
     Create a new widget.
     
@@ -75,30 +71,32 @@ def create_widget(widget_data: WidgetCreate) -> dict:
             id=widget_id,
             name=widget_data.name,
             description=widget_data.description,
+            project_id=project_id,
         )
         created = widget_repo.create(widget)
         
         # Set tool associations
         if widget_data.tool_ids:
-            tool_widget_repo.set_tools_for_widget(created.id, widget_data.tool_ids)
+            tool_widget_repo.set_tools_for_widget(created.id, widget_data.tool_ids, project_id)
         
         # Create conversation for the widget
-        conversation = chat_repo.get_or_create_conversation(widget_id=created.id)
+        conversation = chat_repo.get_or_create_conversation(widget_id=created.id, project_id=project_id)
         
         # Create the first user message with create_prompt
         chat_repo.create_message(
             conversation_id=conversation.id,
             role="user",
             content=widget_data.create_prompt,
+            project_id=project_id,
         )
         
         # Get tools for the widget
-        tool_widgets = tool_widget_repo.get_by_widget_id(created.id)
+        tool_widgets = tool_widget_repo.get_by_widget_id(created.id, project_id=project_id)
         tool_ids = [tw.tool_id for tw in tool_widgets]
-        tools = [tool_repo.get_by_id(tool_id) for tool_id in tool_ids]
+        tools = [tool_repo.get_by_id(tool_id, project_id) for tool_id in tool_ids]
         
         # Generate response using LlmChat
-        previous_messages = chat_repo.list_messages(conversation.id)
+        previous_messages = chat_repo.list_messages(conversation.id, project_id=project_id)
         llm_chat = LlmChat()
         response_text, ui_resource_dict = llm_chat.generate_response(
             widget_id=created.id,
@@ -113,7 +111,9 @@ def create_widget(widget_data: WidgetCreate) -> dict:
             created_resource = resource_repo.create(UiWidgetResource(
                 id=_generate_id(),
                 widget_id=created.id,
+                widget_project_id=project_id,
                 resource=ui_resource_dict,
+                project_id=project_id,
             ))
             ui_resource_id = created_resource.id
         
@@ -122,13 +122,16 @@ def create_widget(widget_data: WidgetCreate) -> dict:
             conversation_id=conversation.id,
             role="assistant",
             content=response_text,
+            project_id=project_id,
             ui_resource_id=ui_resource_id,
         )
         
         # Set ui_resource_id on the widget if one was created
         if ui_resource_id:
-            update_data = {"ui_widget_resource_id": ui_resource_id}
-            widget_repo.update(created.id, update_data)
+            update_data = {
+                "ui_widget_resource_id": ui_resource_id,
+            }
+            widget_repo.update(created.id, update_data, project_id=project_id)
         
         return {"status": "ok"}
     except NotFoundError as e:
@@ -150,6 +153,7 @@ def create_widget(widget_data: WidgetCreate) -> dict:
     summary="List widgets (paginated)",
 )
 def list_widgets(
+    project_id: str = Depends(verify_project_id_path),
     limit: int = 20,
     offset: int = 0,
 ) -> WidgetListResponse:
@@ -183,15 +187,15 @@ def list_widgets(
         tool_widget_repo = ToolWidgetRepository()
         
         # Get paginated widgets
-        widgets = widget_repo.list_paginated(limit=limit, offset=offset)
+        widgets = widget_repo.list_paginated(project_id, limit=limit, offset=offset)
         
         # Get total count
-        total = widget_repo.count()
+        total = widget_repo.count(project_id=project_id)
         
         # Build response items
         items = []
         for widget in widgets:
-            tool_widgets = tool_widget_repo.get_by_widget_id(widget.id)
+            tool_widgets = tool_widget_repo.get_by_widget_id(widget.id, project_id=project_id)
             tool_ids = [tw.tool_id for tw in tool_widgets]
             
             widget_data = widget.model_dump()
@@ -226,14 +230,17 @@ def list_widgets(
     status_code=status.HTTP_200_OK,
     summary="Get a widget",
 )
-def get_widget(widget_id: str) -> WidgetResponse:
+def get_widget(
+    widget_id: str,
+    project_id: str = Depends(verify_project_id_path),
+) -> WidgetResponse:
     """Get a widget by ID."""
     try:
         widget_repo = WidgetRepository()
         tool_widget_repo = ToolWidgetRepository()
         
-        widget = widget_repo.get_by_id(widget_id)
-        tool_widgets = tool_widget_repo.get_by_widget_id(widget_id)
+        widget = widget_repo.get_by_id(widget_id, project_id=project_id)
+        tool_widgets = tool_widget_repo.get_by_widget_id(widget_id, project_id=project_id)
         tool_ids = [tw.tool_id for tw in tool_widgets]
         
         widget_data = widget.model_dump()
@@ -256,7 +263,11 @@ def get_widget(widget_id: str) -> WidgetResponse:
     status_code=status.HTTP_200_OK,
     summary="Update a widget",
 )
-def update_widget(widget_id: str, widget_data: WidgetUpdate) -> WidgetResponse:
+def update_widget(
+    widget_id: str,
+    widget_data: WidgetUpdate,
+    project_id: str = Depends(verify_project_id_path),
+) -> WidgetResponse:
     """
     Update a widget.
     
@@ -266,6 +277,9 @@ def update_widget(widget_id: str, widget_data: WidgetUpdate) -> WidgetResponse:
         widget_repo = WidgetRepository()
         tool_widget_repo = ToolWidgetRepository()
         resource_repo = UiWidgetResourceRepository()
+        
+        # Verify widget exists and belongs to project
+        widget_repo.get_by_id(widget_id, project_id=project_id)
         
         update_data = {}
         if widget_data.name is not None:
@@ -279,14 +293,14 @@ def update_widget(widget_id: str, widget_data: WidgetUpdate) -> WidgetResponse:
             )
         
         if update_data:
-            updated = widget_repo.update(widget_id, update_data)
+            updated = widget_repo.update(widget_id, update_data, project_id=project_id)
         else:
-            updated = widget_repo.get_by_id(widget_id)
+            updated = widget_repo.get_by_id(widget_id, project_id=project_id)
         
         if widget_data.tool_ids is not None:
-            tool_widget_repo.set_tools_for_widget(widget_id, widget_data.tool_ids)
+            tool_widget_repo.set_tools_for_widget(widget_id, widget_data.tool_ids, project_id)
         
-        tool_widgets = tool_widget_repo.get_by_widget_id(widget_id)
+        tool_widgets = tool_widget_repo.get_by_widget_id(widget_id, project_id=project_id)
         tool_ids = [tw.tool_id for tw in tool_widgets]
         
         response_data = updated.model_dump()
@@ -310,31 +324,21 @@ def update_widget(widget_id: str, widget_data: WidgetUpdate) -> WidgetResponse:
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete a widget",
 )
-def delete_widget(widget_id: str) -> None:
+def delete_widget(
+    widget_id: str,
+    project_id: str = Depends(verify_project_id_path),
+) -> None:
     """
     Delete a widget.
-    
-    The widget cannot be deleted if it has:
-    - Active or existing deployments
     """
     try:
         widget_repo = WidgetRepository()
-        deployment_repo = WidgetDeploymentRepository()
         
-        # Verify widget exists
-        widget_repo.get_by_id(widget_id)
+        # Verify widget exists and belongs to project
+        widget_repo.get_by_id(widget_id, project_id=project_id)
         
-        # Check for deployments
-        deployments = deployment_repo.list_by_widget_id(widget_id)
-        if deployments:
-            deployment_count = len(deployments)
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Cannot delete widget: {deployment_count} deployment(s) exist for this widget. Please delete all deployments first."
-            )
-        
-        # All checks passed, proceed with deletion
-        deleted = widget_repo.delete(widget_id)
+        # Proceed with deletion
+        deleted = widget_repo.delete(widget_id, project_id=project_id)
         if not deleted:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -360,7 +364,11 @@ def delete_widget(widget_id: str) -> None:
     status_code=status.HTTP_200_OK,
     summary="Set UI widget resource ID for a widget",
 )
-def set_widget_resource(widget_id: str, resource_data: WidgetSetResourceRequest) -> WidgetResponse:
+def set_widget_resource(
+    widget_id: str,
+    resource_data: WidgetSetResourceRequest,
+    project_id: str = Depends(verify_project_id_path),
+) -> WidgetResponse:
     """
     Set the UI widget resource ID for a widget.
     
@@ -371,18 +379,21 @@ def set_widget_resource(widget_id: str, resource_data: WidgetSetResourceRequest)
         resource_repo = UiWidgetResourceRepository()
         tool_widget_repo = ToolWidgetRepository()
         
-        # Verify widget exists
-        widget_repo.get_by_id(widget_id)
+        # Verify widget exists and belongs to project
+        widget_repo.get_by_id(widget_id, project_id=project_id)
         
-        # Verify ui_widget_resource exists
-        resource_repo.get_by_id(resource_data.ui_widget_resource_id)
+        # Verify ui_widget_resource exists and belongs to project
+        resource_repo.get_by_id(resource_data.ui_widget_resource_id, project_id=project_id)
         
         # Update widget with new ui_widget_resource_id
-        update_data = {"ui_widget_resource_id": resource_data.ui_widget_resource_id}
-        updated = widget_repo.update(widget_id, update_data)
+        update_data = {
+            "ui_widget_resource_id": resource_data.ui_widget_resource_id,
+            "ui_widget_resource_project_id": project_id,
+        }
+        updated = widget_repo.update(widget_id, update_data, project_id=project_id)
         
         # Fetch tool_ids for response
-        tool_widgets = tool_widget_repo.get_by_widget_id(widget_id)
+        tool_widgets = tool_widget_repo.get_by_widget_id(widget_id, project_id=project_id)
         tool_ids = [tw.tool_id for tw in tool_widgets]
         
         response_data = updated.model_dump()
@@ -408,7 +419,10 @@ def set_widget_resource(widget_id: str, resource_data: WidgetSetResourceRequest)
     status_code=status.HTTP_201_CREATED,
     summary="Create a UI widget resource",
 )
-def create_ui_widget_resource(resource_data: UiWidgetResourceCreate) -> UiWidgetResourceResponse:
+def create_ui_widget_resource(
+    resource_data: UiWidgetResourceCreate,
+    project_id: str = Depends(verify_project_id_path),
+) -> UiWidgetResourceResponse:
     """
     Create a new UI widget resource.
     
@@ -418,8 +432,8 @@ def create_ui_widget_resource(resource_data: UiWidgetResourceCreate) -> UiWidget
         repo = UiWidgetResourceRepository()
         widget_repo = WidgetRepository()
         
-        # Verify widget exists
-        widget_repo.get_by_id(resource_data.widget_id)
+        # Verify widget exists and belongs to project
+        widget = widget_repo.get_by_id(resource_data.widget_id, project_id=project_id)
         
         # Generate ID
         resource_id = _generate_id()
@@ -429,6 +443,7 @@ def create_ui_widget_resource(resource_data: UiWidgetResourceCreate) -> UiWidget
             id=resource_id,
             widget_id=resource_data.widget_id,
             resource=resource_data.resource,
+            project_id=project_id,
         )
         
         created = repo.create(resource)
@@ -452,14 +467,17 @@ def create_ui_widget_resource(resource_data: UiWidgetResourceCreate) -> UiWidget
     status_code=status.HTTP_200_OK,
     summary="List all UI widget resources for a widget",
 )
-def list_ui_widget_resources(widget_id: str) -> list[UiWidgetResourceListResponse]:
+def list_ui_widget_resources(
+    widget_id: str,
+    project_id: str = Depends(verify_project_id_path),
+) -> list[UiWidgetResourceListResponse]:
     """List all UI widget resources for a widget."""
     try:
         widget_repo = WidgetRepository()
         resource_repo = UiWidgetResourceRepository()
         
-        widget_repo.get_by_id(widget_id)
-        resources = resource_repo.list_by_widget_id(widget_id)
+        widget_repo.get_by_id(widget_id, project_id=project_id)
+        resources = resource_repo.list_by_widget_id(widget_id, project_id=project_id)
         
         return [
             UiWidgetResourceListResponse.model_validate(r.model_dump()) for r in resources
@@ -480,14 +498,17 @@ def list_ui_widget_resources(widget_id: str) -> list[UiWidgetResourceListRespons
     status_code=status.HTTP_200_OK,
     summary="Get the latest UI widget resource for a widget",
 )
-def get_latest_ui_widget_resource(widget_id: str) -> UiWidgetResourceResponse:
+def get_latest_ui_widget_resource(
+    widget_id: str,
+    project_id: str = Depends(verify_project_id_path),
+) -> UiWidgetResourceResponse:
     """Get the latest UI widget resource for a widget (most recent by created_at)."""
     try:
         widget_repo = WidgetRepository()
         resource_repo = UiWidgetResourceRepository()
         
-        widget_repo.get_by_id(widget_id)
-        latest_resource = resource_repo.get_latest_by_widget_id(widget_id)
+        widget_repo.get_by_id(widget_id, project_id=project_id)
+        latest_resource = resource_repo.get_latest_by_widget_id(widget_id, project_id=project_id)
         
         if not latest_resource:
             raise HTTPException(
@@ -514,11 +535,14 @@ def get_latest_ui_widget_resource(widget_id: str) -> UiWidgetResourceResponse:
     status_code=status.HTTP_200_OK,
     summary="Get a UI widget resource",
 )
-def get_ui_widget_resource(resource_id: str) -> UiWidgetResourceResponse:
+def get_ui_widget_resource(
+    resource_id: str,
+    project_id: str = Depends(verify_project_id_path),
+) -> UiWidgetResourceResponse:
     """Get a UI widget resource by ID."""
     try:
         repo = UiWidgetResourceRepository()
-        resource = repo.get_by_id(resource_id)
+        resource = repo.get_by_id(resource_id, project_id=project_id)
         
         return UiWidgetResourceResponse.model_validate(resource.model_dump())
     except NotFoundError as e:
@@ -537,7 +561,11 @@ def get_ui_widget_resource(resource_id: str) -> UiWidgetResourceResponse:
     status_code=status.HTTP_200_OK,
     summary="Update a UI widget resource",
 )
-def update_ui_widget_resource(resource_id: str, resource_data: UiWidgetResourceUpdate) -> UiWidgetResourceResponse:
+def update_ui_widget_resource(
+    resource_id: str,
+    resource_data: UiWidgetResourceUpdate,
+    project_id: str = Depends(verify_project_id_path),
+) -> UiWidgetResourceResponse:
     """
     Update a UI widget resource.
     
@@ -546,9 +574,12 @@ def update_ui_widget_resource(resource_id: str, resource_data: UiWidgetResourceU
     try:
         repo = UiWidgetResourceRepository()
         
+        # Verify resource exists and belongs to project
+        repo.get_by_id(resource_id, project_id=project_id)
+        
         update_data = {"resource": resource_data.resource}
         
-        updated = repo.update(resource_id, update_data)
+        updated = repo.update(resource_id, update_data, project_id=project_id)
         
         return UiWidgetResourceResponse.model_validate(updated.model_dump())
     except NotFoundError as e:
@@ -568,13 +599,16 @@ def update_ui_widget_resource(resource_id: str, resource_data: UiWidgetResourceU
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete a UI widget resource",
 )
-def delete_ui_widget_resource(resource_id: str) -> None:
+def delete_ui_widget_resource(
+    resource_id: str,
+    project_id: str = Depends(verify_project_id_path),
+) -> None:
     """Delete a UI widget resource."""
     try:
         repo = UiWidgetResourceRepository()
-        repo.get_by_id(resource_id)
+        repo.get_by_id(resource_id, project_id=project_id)
         
-        deleted = repo.delete(resource_id)
+        deleted = repo.delete(resource_id, project_id=project_id)
         if not deleted:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -610,19 +644,21 @@ def delete_ui_widget_resource(resource_id: str) -> None:
         }
     },
 )
-def create_widget_deployment(widget_id: str) -> FileResponse:
+def create_widget_deployment(
+    widget_id: str,
+    project_id: str = Depends(verify_project_id_path),
+) -> FileResponse:
     """
     Generate the MCP server bundle for a widget and return it as a downloadable zip file.
     """
     try:
         widget_repo = WidgetRepository()
         # Verify widget exists before generating files
-        widget_repo.get_by_id(widget_id)
+        widget_repo.get_by_id(widget_id, project_id=project_id)
         
-        archive_path, deployment_type = create_deployment(widget_id)
+        archive_path = create_deployment(widget_id, project_id=project_id)
         
         headers = {
-            "X-Widget-Deployment-Type": deployment_type.value,
             "X-Widget-Id": widget_id,
         }
         
@@ -642,125 +678,3 @@ def create_widget_deployment(widget_id: str) -> FileResponse:
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to create widget deployment bundle: {str(e)}"
         )
-
-
-@router.get(
-    "/widgets/{widget_id}/deployments",
-    response_model=list[WidgetDeploymentListResponse],
-    status_code=status.HTTP_200_OK,
-    summary="List all deployments for a widget",
-)
-def list_widget_deployments(widget_id: str) -> list[WidgetDeploymentListResponse]:
-    """List all deployments for a widget."""
-    try:
-        widget_repo = WidgetRepository()
-        deployment_repo = WidgetDeploymentRepository()
-        
-        # Verify widget exists
-        widget_repo.get_by_id(widget_id)
-        
-        deployments = deployment_repo.list_by_widget_id(widget_id)
-        
-        return [
-            WidgetDeploymentListResponse.model_validate(d.model_dump()) for d in deployments
-        ]
-    except NotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e.detail))
-    except Exception as e:
-        logger.exception(f"Error listing widget deployments: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to list widget deployments: {str(e)}"
-        )
-
-
-@router.get(
-    "/widget-deployments/{deployment_id}",
-    response_model=WidgetDeploymentResponse,
-    status_code=status.HTTP_200_OK,
-    summary="Get a widget deployment",
-)
-def get_widget_deployment(deployment_id: str) -> WidgetDeploymentResponse:
-    """Get a widget deployment by ID."""
-    try:
-        repo = WidgetDeploymentRepository()
-        deployment = repo.get_by_id(deployment_id)
-        
-        return WidgetDeploymentResponse.model_validate(deployment.model_dump())
-    except NotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e.detail))
-    except Exception as e:
-        logger.exception(f"Error getting widget deployment: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get widget deployment: {str(e)}"
-        )
-
-
-@router.post(
-    "/widget-deployments/{deployment_id}/suspend",
-    response_model=WidgetDeploymentResponse,
-    status_code=status.HTTP_200_OK,
-    summary="Suspend a widget deployment",
-)
-def suspend_widget_deployment(deployment_id: str) -> WidgetDeploymentResponse:
-    """
-    Suspend a widget deployment.
-    
-    Sets the deployment status to 'suspended'.
-    """
-    try:
-        repo = WidgetDeploymentRepository()
-        
-        # Verify deployment exists
-        repo.get_by_id(deployment_id)
-        
-        # Update status to suspended
-        update_data = {"deployment_status": WidgetDeploymentStatusEnum.SUSPENDED}
-        updated = repo.update(deployment_id, update_data)
-        
-        return WidgetDeploymentResponse.model_validate(updated.model_dump())
-    except NotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e.detail))
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.exception(f"Error suspending widget deployment: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to suspend widget deployment: {str(e)}"
-        )
-
-
-@router.delete(
-    "/widget-deployments/{deployment_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
-    summary="Delete a widget deployment",
-)
-def delete_widget_deployment(deployment_id: str) -> None:
-    """Delete a widget deployment."""
-    try:
-        repo = WidgetDeploymentRepository()
-        
-        # Verify it exists
-        repo.get_by_id(deployment_id)
-        
-        deleted = repo.delete(deployment_id)
-        if not deleted:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Widget deployment with ID '{deployment_id}' not found"
-            )
-        
-        return None
-    except HTTPException:
-        raise
-    except NotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e.detail))
-    except Exception as e:
-        logger.exception(f"Error deleting widget deployment: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to delete widget deployment: {str(e)}"
-        )
-

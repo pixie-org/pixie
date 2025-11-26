@@ -29,8 +29,8 @@ class ToolkitSourceRepository:
         source_type = data["source_type"].value if isinstance(data["source_type"], ToolSourceType) else data["source_type"]
         
         query = """
-            INSERT INTO toolkit_source (id, name, source_type, description, configuration)
-            VALUES (%(id)s, %(name)s, %(source_type)s, %(description)s, %(configuration)s::jsonb)
+            INSERT INTO toolkit_source (id, name, source_type, description, configuration, project_id)
+            VALUES (%(id)s, %(name)s, %(source_type)s, %(description)s, %(configuration)s::jsonb, %(project_id)s)
             RETURNING *
         """
         
@@ -40,6 +40,7 @@ class ToolkitSourceRepository:
             "source_type": source_type,
             "description": data.get("description"),
             "configuration": config_json,
+            "project_id": data["project_id"],
         }
         
         with self._db.transaction():
@@ -55,11 +56,10 @@ class ToolkitSourceRepository:
         
         return ToolkitSource(**result)
 
-    def get_by_id(self, toolkit_source_id: str) -> ToolkitSource:
-        """Get a toolkit source by ID."""
-        query = "SELECT * FROM toolkit_source WHERE id = %s"
-        
-        result = self._db.execute_fetchone(query, (toolkit_source_id,))
+    def get_by_id(self, toolkit_source_id: str, project_id: str) -> ToolkitSource:
+        """Get a toolkit source by ID for a specific project."""
+        query = "SELECT * FROM toolkit_source WHERE id = %s AND project_id = %s"
+        result = self._db.execute_fetchone(query, (toolkit_source_id, project_id))
         
         if not result:
             raise NotFoundError(
@@ -73,11 +73,10 @@ class ToolkitSourceRepository:
         
         return ToolkitSource(**result)
 
-    def list_all(self) -> list[ToolkitSource]:
-        """List all toolkit sources."""
-        query = "SELECT * FROM toolkit_source ORDER BY created_at DESC"
-        
-        results = self._db.execute_fetchall(query)
+    def list_all(self, project_id: str) -> list[ToolkitSource]:
+        """List all toolkit sources for a specific project."""
+        query = "SELECT * FROM toolkit_source WHERE project_id = %s ORDER BY created_at DESC"
+        results = self._db.execute_fetchall(query, (project_id,))
         
         # Parse configuration JSON back to dict if needed
         # psycopg with dict_row should return JSONB as dict, but handle string case
@@ -87,20 +86,18 @@ class ToolkitSourceRepository:
         
         return [ToolkitSource(**row) for row in results]
 
-    def delete(self, toolkit_source_id: str) -> bool:
-        """Delete a toolkit source."""
-        query = "DELETE FROM toolkit_source WHERE id = %s RETURNING id"
-        
+    def delete(self, toolkit_source_id: str, project_id: str) -> bool:
+        """Delete a toolkit source for a specific project."""
+        query = "DELETE FROM toolkit_source WHERE id = %s AND project_id = %s RETURNING id"
         with self._db.transaction():
-            result = self._db.execute_fetchone(query, (toolkit_source_id,))
+            result = self._db.execute_fetchone(query, (toolkit_source_id, project_id))
         
         return result is not None
 
-    def count_toolkits_using_source(self, toolkit_source_id: str) -> int:
-        """Count how many toolkits are using this toolkit source."""
-        query = "SELECT COUNT(*) as count FROM toolkit WHERE toolkit_source_id = %s"
-        
-        result = self._db.execute_fetchval(query, (toolkit_source_id,))
+    def count_toolkits_using_source(self, toolkit_source_id: str, project_id: str) -> int:
+        """Count how many toolkits are using this toolkit source for a specific project."""
+        query = "SELECT COUNT(*) as count FROM toolkit WHERE toolkit_source_id = %s AND project_id = %s"
+        result = self._db.execute_fetchval(query, (toolkit_source_id, project_id))
         
         return result or 0
 

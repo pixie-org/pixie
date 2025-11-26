@@ -7,30 +7,46 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
+import { useProject } from "@/contexts/ProjectContext";
 
-// Route to label mapping
+// Route to label mapping (for non-project-scoped routes)
 const routeLabels: Record<string, string> = {
   "/": "Home",
-  "/toolkits": "Tools",
-  "/designs": "Designs",
-  "/widgets": "Widgets",
-  "/widgets/create": "Create",
-  "/toolkit-sources": "Toolkit Sources",
-  "/create-tool-source": "Create Tool Source",
-  "/env-variables": "Environments",
-  "/widget-playground": "Playground",
-  "/evaluate": "Evaluations",
-  "/deployments": "Deployments",
-  "/metrics": "Metrics",
-  "/logs": "Logs",
-  "/playground": "Playground",
-  "/tools": "Tools",
-  "/custom-widget": "Custom Widget",
+  "/login": "Login",
+  "/waitlist": "Waitlist",
+};
+
+// Route segment to label mapping (for project-scoped routes)
+const projectRouteLabels: Record<string, string> = {
+  "toolkits": "Toolkits",
+  "widgets": "Widgets",
+  "designs": "Designs",
+  "create": "Create",
+  "edit-ux": "Edit UX",
+  "env-variables": "Env Variables",
+  "playground": "Playground",
+  "mcp": "MCP",
+  "evaluate": "Evaluate",
+  "deployments": "Deployments",
+  "metrics": "Metrics",
+  "logs": "Logs",
 };
 
 export function PageBreadcrumb() {
   const location = useLocation();
   const pathname = location.pathname;
+  const { projects, selectedProject } = useProject();
+
+  // Get project name by ID
+  const getProjectName = (projectId: string): string => {
+    // Check if it's the selected project
+    if (selectedProject?.id === projectId) {
+      return selectedProject.name;
+    }
+    // Otherwise, find it in the projects list
+    const project = projects.find(p => p.id === projectId);
+    return project?.name || projectId;
+  };
 
   // Generate breadcrumb items
   const generateBreadcrumbs = () => {
@@ -48,6 +64,86 @@ export function PageBreadcrumb() {
       return items;
     }
 
+    // Handle project-scoped routes: /projects/:projectId/...
+    const projectRouteMatch = pathname.match(/^\/projects\/([^/]+)(?:\/(.*))?$/);
+    if (projectRouteMatch) {
+      const projectId = projectRouteMatch[1];
+      const remainingPath = projectRouteMatch[2] || "";
+
+      // Add project breadcrumb with project name (or ID as fallback)
+      const projectName = getProjectName(projectId);
+      items.push({
+        label: projectName,
+        path: `/projects/${projectId}`,
+        isActive: !remainingPath,
+      });
+
+      if (!remainingPath) {
+        return items;
+      }
+
+      const segments = remainingPath.split("/").filter(Boolean);
+
+      // Handle toolkit detail pages: /projects/:projectId/toolkits/:toolkitId
+      if (segments[0] === "toolkits" && segments.length > 1) {
+        items.push({
+          label: "Toolkits",
+          path: `/projects/${projectId}/toolkits`,
+          isActive: false,
+        });
+        items.push({
+          label: segments[1] || "Detail",
+          path: pathname,
+          isActive: true,
+        });
+        return items;
+      }
+
+      // Handle widget create page: /projects/:projectId/widgets/create
+      if (segments[0] === "widgets" && segments[1] === "create") {
+        items.push({
+          label: "Widgets",
+          path: `/projects/${projectId}/widgets`,
+          isActive: false,
+        });
+        items.push({
+          label: "Create",
+          path: pathname,
+          isActive: true,
+        });
+        return items;
+      }
+
+      // Handle widget edit pages: /projects/:projectId/widgets/:widgetId/edit-ux
+      if (segments[0] === "widgets" && segments.length > 2 && segments[2] === "edit-ux") {
+        items.push({
+          label: "Widgets",
+          path: `/projects/${projectId}/widgets`,
+          isActive: false,
+        });
+        items.push({
+          label: segments[1] || "Widget",
+          path: pathname,
+          isActive: true,
+        });
+        return items;
+      }
+
+      // Handle other project-scoped routes
+      segments.forEach((segment, index) => {
+        const path = `/projects/${projectId}/` + segments.slice(0, index + 1).join("/");
+        const label = projectRouteLabels[segment] || segment;
+        items.push({
+          label: label,
+          path: path,
+          isActive: index === segments.length - 1,
+        });
+      });
+
+      return items;
+    }
+
+    // Handle non-project-scoped routes (legacy support)
     // Handle toolkit detail pages: /toolkits/:toolkitId
     if (pathname.startsWith("/toolkits/")) {
       const toolkitId = pathname.split("/toolkits/")[1];

@@ -31,7 +31,7 @@ class WidgetChatRepository:
         """Initialize with database client."""
         self._db = db_client or db
 
-    def get_or_create_conversation(self, widget_id: str) -> Conversation:
+    def get_or_create_conversation(self, widget_id: str, project_id: str) -> Conversation:
         """
         Get an existing conversation for widget_id, or create a new one.
         
@@ -40,12 +40,12 @@ class WidgetChatRepository:
         # Try to find existing conversation
         query = """
             SELECT * FROM widget_chat
-            WHERE widget_id = %s
+            WHERE widget_id = %s AND project_id = %s
             ORDER BY created_at DESC
             LIMIT 1
         """
         
-        result = self._db.execute_fetchone(query, (widget_id,))
+        result = self._db.execute_fetchone(query, (widget_id, project_id))
         
         if result:
             return Conversation(**result)
@@ -54,14 +54,15 @@ class WidgetChatRepository:
         conversation_id = _generate_conversation_id()
         
         insert_query = """
-            INSERT INTO widget_chat (id, widget_id)
-            VALUES (%(id)s, %(widget_id)s)
+            INSERT INTO widget_chat (id, widget_id, project_id)
+            VALUES (%(id)s, %(widget_id)s, %(project_id)s)
             RETURNING *
         """
         
         params = {
             "id": conversation_id,
             "widget_id": widget_id,
+            "project_id": project_id,
         }
         
         with self._db.transaction():
@@ -72,11 +73,10 @@ class WidgetChatRepository:
         
         return Conversation(**result)
 
-    def get_conversation(self, conversation_id: str) -> Conversation:
-        """Get a conversation by ID."""
-        query = "SELECT * FROM widget_chat WHERE id = %s"
-        
-        result = self._db.execute_fetchone(query, (conversation_id,))
+    def get_conversation(self, conversation_id: str, project_id: str) -> Conversation:
+        """Get a conversation by ID for a specific project."""
+        query = "SELECT * FROM widget_chat WHERE id = %s AND project_id = %s"
+        result = self._db.execute_fetchone(query, (conversation_id, project_id))
         
         if not result:
             raise NotFoundError(
@@ -90,6 +90,7 @@ class WidgetChatRepository:
         conversation_id: str,
         role: str | MessageRole,
         content: str,
+        project_id: str,
         ui_resource_id: str | None = None,
     ) -> Message:
         """Create a new message in a conversation."""
@@ -99,8 +100,8 @@ class WidgetChatRepository:
         role_str = role.value if isinstance(role, MessageRole) else role
         
         insert_query = """
-            INSERT INTO widget_message (id, conversation_id, role, content, ui_resource_id)
-            VALUES (%(id)s, %(conversation_id)s, %(role)s::widget_message_role, %(content)s, %(ui_resource_id)s)
+            INSERT INTO widget_message (id, conversation_id, role, content, ui_resource_id, project_id)
+            VALUES (%(id)s, %(conversation_id)s, %(role)s::widget_message_role, %(content)s, %(ui_resource_id)s, %(project_id)s)
             RETURNING *
         """
         
@@ -110,6 +111,7 @@ class WidgetChatRepository:
             "role": role_str,
             "content": content,
             "ui_resource_id": ui_resource_id,
+            "project_id": project_id,
         }
 
         with self._db.transaction():
@@ -121,18 +123,16 @@ class WidgetChatRepository:
         return Message(**result)
 
     def list_messages(
-        self, conversation_id: str, limit: int | None = None
+        self, conversation_id: str, project_id: str, limit: int | None = None
     ) -> list[Message]:
-        """List all messages for a conversation, ordered by creation time."""
+        """List all messages for a conversation for a specific project, ordered by creation time."""
         query = """
             SELECT * FROM widget_message
-            WHERE conversation_id = %s
+            WHERE conversation_id = %s AND project_id = %s
             ORDER BY created_at ASC
         """
-        
         if limit:
             query += f" LIMIT {limit}"
-        
-        results = self._db.execute_fetchall(query, (conversation_id,))
+        results = self._db.execute_fetchall(query, (conversation_id, project_id))
         return [Message(**row) for row in results]
 

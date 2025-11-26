@@ -5,7 +5,7 @@ from logging import getLogger
 from typing import Any
 
 import yaml
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from mcp import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
 
@@ -34,10 +34,11 @@ from app.db.storage.mcp_tool_repository import McpToolRepository
 from app.db.storage.toolkit_repository import ToolkitRepository
 from app.db.storage.toolkit_source_repository import ToolkitSourceRepository
 from app.server.exceptions import NotFoundError
+from app.server.project_access import verify_project_id_path
 
 logger = getLogger(__name__)
 
-router = APIRouter(prefix="", tags=["tools"])
+router = APIRouter(prefix="/projects/{project_id}", tags=["tools"])
 
 
 def _generate_id() -> str:
@@ -52,7 +53,10 @@ def _generate_id() -> str:
     status_code=status.HTTP_201_CREATED,
     summary="Create a toolkit source",
 )
-async def create_toolkit_source(toolkit_source_data: ToolkitSourceCreate) -> ToolkitSourceResponse:
+async def create_toolkit_source(
+    toolkit_source_data: ToolkitSourceCreate,
+    project_id: str = Depends(verify_project_id_path),
+) -> ToolkitSourceResponse:
     """
     Create a new toolkit source.
     
@@ -94,6 +98,7 @@ async def create_toolkit_source(toolkit_source_data: ToolkitSourceCreate) -> Too
             source_type=toolkit_source_data.source_type,
             description=toolkit_source_data.description,
             configuration=toolkit_source_data.configuration,
+            project_id=project_id,
         )
         
         created = repo.create(toolkit_source)
@@ -115,11 +120,14 @@ async def create_toolkit_source(toolkit_source_data: ToolkitSourceCreate) -> Too
     status_code=status.HTTP_200_OK,
     summary="List all toolkit sources",
 )
-def list_toolkit_sources() -> list[ToolkitSourceListResponse]:
-    """List all toolkit sources."""
+def list_toolkit_sources(
+    project_id: str = Depends(verify_project_id_path),
+) -> list[ToolkitSourceListResponse]:
+    """List all toolkit sources for a project."""
     try:
+        
         repo = ToolkitSourceRepository()
-        sources = repo.list_all()
+        sources = repo.list_all(project_id=project_id)
         
         return [
             ToolkitSourceListResponse.model_validate(s.model_dump()) for s in sources
@@ -138,11 +146,15 @@ def list_toolkit_sources() -> list[ToolkitSourceListResponse]:
     status_code=status.HTTP_200_OK,
     summary="Get a toolkit source",
 )
-def get_toolkit_source(toolkit_source_id: str) -> ToolkitSourceResponse:
+def get_toolkit_source(
+    toolkit_source_id: str,
+    project_id: str = Depends(verify_project_id_path),
+) -> ToolkitSourceResponse:
     """Get a toolkit source by ID."""
     try:
+        
         repo = ToolkitSourceRepository()
-        source = repo.get_by_id(toolkit_source_id)
+        source = repo.get_by_id(toolkit_source_id, project_id=project_id)
         
         return ToolkitSourceResponse.model_validate(source.model_dump())
     except NotFoundError as e:
@@ -160,28 +172,32 @@ def get_toolkit_source(toolkit_source_id: str) -> ToolkitSourceResponse:
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete a toolkit source",
 )
-def delete_toolkit_source(toolkit_source_id: str) -> None:
+def delete_toolkit_source(
+    toolkit_source_id: str,
+    project_id: str = Depends(verify_project_id_path),
+) -> None:
     """
     Delete a toolkit source.
     
     Cannot delete if there are toolkits using this source.
     """
     try:
+        
         repo = ToolkitSourceRepository()
         
         # Check if any toolkits are using this source
-        toolkit_count = repo.count_toolkits_using_source(toolkit_source_id)
+        toolkit_count = repo.count_toolkits_using_source(toolkit_source_id, project_id=project_id)
         if toolkit_count > 0:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=f"Cannot delete toolkit source: {toolkit_count} toolkit(s) are using this source"
             )
         
-        # Verify it exists
-        repo.get_by_id(toolkit_source_id)
+        # Verify it exists and belongs to project
+        repo.get_by_id(toolkit_source_id, project_id=project_id)
         
         # Delete
-        deleted = repo.delete(toolkit_source_id)
+        deleted = repo.delete(toolkit_source_id, project_id=project_id)
         if not deleted:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -208,7 +224,10 @@ def delete_toolkit_source(toolkit_source_id: str) -> None:
     status_code=status.HTTP_201_CREATED,
     summary="Create a toolkit",
 )
-async def create_toolkit(toolkit_data: ToolkitCreate) -> ToolkitResponse:
+async def create_toolkit(
+    toolkit_data: ToolkitCreate,
+    project_id: str = Depends(verify_project_id_path),
+) -> ToolkitResponse:
     """
     Create a new toolkit.
     
@@ -219,22 +238,26 @@ async def create_toolkit(toolkit_data: ToolkitCreate) -> ToolkitResponse:
     from the OpenAPI specification into the newly created toolkit.
     """
     try:
+        
         toolkit_repo = ToolkitRepository()
         source_repo = ToolkitSourceRepository()
         tool_repo = McpToolRepository()
         
-        # Verify toolkit source exists
-        toolkit_source = source_repo.get_by_id(toolkit_data.toolkit_source_id)
+        # Verify toolkit source exists and belongs to project
+        toolkit_source = source_repo.get_by_id(toolkit_data.toolkit_source_id, project_id=project_id)
         
         # Generate ID
         toolkit_id = _generate_id()
         
         # Create toolkit model
+        # toolkit_source_project_id should match project_id for referential integrity
         toolkit = Toolkit(
             id=toolkit_id,
             name=toolkit_data.name,
             toolkit_source_id=toolkit_data.toolkit_source_id,
+            toolkit_source_project_id=project_id,
             description=toolkit_data.description,
+            project_id=project_id,
         )
         
         created = toolkit_repo.create(toolkit)
@@ -271,6 +294,7 @@ async def create_toolkit(toolkit_data: ToolkitCreate) -> ToolkitResponse:
                                     outputSchema=mcp_tool.get("outputSchema"),
                                     annotations=mcp_tool.get("annotations"),
                                     is_enabled=True,
+                                    project_id=project_id,
                                 )
                                 
                                 tool_repo.create(tool)
@@ -320,6 +344,7 @@ async def create_toolkit(toolkit_data: ToolkitCreate) -> ToolkitResponse:
                                     outputSchema=openapi_tool.get("outputSchema"),
                                     annotations=openapi_tool.get("annotations"),
                                     is_enabled=True,
+                                    project_id=project_id,
                                 )
                                 
                                 tool_repo.create(tool)
@@ -338,7 +363,7 @@ async def create_toolkit(toolkit_data: ToolkitCreate) -> ToolkitResponse:
                     # The user can manually import tools later
         
         # Get toolkit source for response
-        toolkit_source = source_repo.get_by_id(created.toolkit_source_id)
+        toolkit_source = source_repo.get_by_id(created.toolkit_source_id, project_id)
         
         response = ToolkitResponse(
             id=created.id,
@@ -368,11 +393,14 @@ async def create_toolkit(toolkit_data: ToolkitCreate) -> ToolkitResponse:
     status_code=status.HTTP_200_OK,
     summary="List all toolkits",
 )
-def list_toolkits() -> list[ToolkitListResponse]:
-    """List all toolkits."""
+def list_toolkits(
+    project_id: str = Depends(verify_project_id_path),
+) -> list[ToolkitListResponse]:
+    """List all toolkits for a project."""
     try:
+        
         repo = ToolkitRepository()
-        toolkits = repo.list_all()
+        toolkits = repo.list_all(project_id=project_id)
         
         return [
             ToolkitListResponse.model_validate(t.model_dump()) for t in toolkits
@@ -391,20 +419,24 @@ def list_toolkits() -> list[ToolkitListResponse]:
     status_code=status.HTTP_200_OK,
     summary="Get a toolkit",
 )
-def get_toolkit(toolkit_id: str) -> ToolkitResponse:
+def get_toolkit(
+    toolkit_id: str,
+    project_id: str = Depends(verify_project_id_path),
+) -> ToolkitResponse:
     """
     Get a toolkit by ID.
     
     Returns toolkit with toolkit source information.
     """
     try:
+        
         toolkit_repo = ToolkitRepository()
         source_repo = ToolkitSourceRepository()
         
-        toolkit = toolkit_repo.get_by_id(toolkit_id)
+        toolkit = toolkit_repo.get_by_id(toolkit_id, project_id)
         
         # Get toolkit source for response
-        toolkit_source = source_repo.get_by_id(toolkit.toolkit_source_id)
+        toolkit_source = source_repo.get_by_id(toolkit.toolkit_source_id, project_id)
         
         response = ToolkitResponse(
             id=toolkit.id,
@@ -432,13 +464,18 @@ def get_toolkit(toolkit_id: str) -> ToolkitResponse:
     status_code=status.HTTP_200_OK,
     summary="Update a toolkit",
 )
-def update_toolkit(toolkit_id: str, toolkit_data: ToolkitUpdate) -> ToolkitResponse:
+def update_toolkit(
+    toolkit_id: str,
+    toolkit_data: ToolkitUpdate,
+    project_id: str = Depends(verify_project_id_path),
+) -> ToolkitResponse:
     """
     Update a toolkit.
     
     Only name and description can be updated.
     """
     try:
+        
         toolkit_repo = ToolkitRepository()
         source_repo = ToolkitSourceRepository()
         
@@ -455,10 +492,13 @@ def update_toolkit(toolkit_id: str, toolkit_data: ToolkitUpdate) -> ToolkitRespo
                 detail="No fields to update"
             )
         
-        updated = toolkit_repo.update(toolkit_id, update_data)
+        # Verify toolkit exists and belongs to project
+        toolkit_repo.get_by_id(toolkit_id, project_id)
+        
+        updated = toolkit_repo.update(toolkit_id, update_data, project_id)
         
         # Get toolkit source for response
-        toolkit_source = source_repo.get_by_id(updated.toolkit_source_id)
+        toolkit_source = source_repo.get_by_id(updated.toolkit_source_id, project_id)
         
         response = ToolkitResponse(
             id=updated.id,
@@ -487,17 +527,21 @@ def update_toolkit(toolkit_id: str, toolkit_data: ToolkitUpdate) -> ToolkitRespo
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete a toolkit",
 )
-def delete_toolkit(toolkit_id: str) -> None:
+def delete_toolkit(
+    toolkit_id: str,
+    project_id: str = Depends(verify_project_id_path),
+) -> None:
     """
     Delete a toolkit.
     
     Cannot delete if there are tools in this toolkit.
     """
     try:
-        repo = ToolkitRepository()
-        repo.get_by_id(toolkit_id)
         
-        deleted = repo.delete(toolkit_id)
+        repo = ToolkitRepository()
+        repo.get_by_id(toolkit_id, project_id)
+        
+        deleted = repo.delete(toolkit_id, project_id)
         if not deleted:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -523,16 +567,20 @@ def delete_toolkit(toolkit_id: str) -> None:
     status_code=status.HTTP_200_OK,
     summary="List all tools in a toolkit",
 )
-def list_tools_in_toolkit(toolkit_id: str) -> list[ToolListResponse]:
+def list_tools_in_toolkit(
+    toolkit_id: str,
+    project_id: str = Depends(verify_project_id_path),
+) -> list[ToolListResponse]:
     """List all tools in a toolkit."""
     try:
+        
         toolkit_repo = ToolkitRepository()
         tool_repo = McpToolRepository()
         
-        # Verify toolkit exists
-        toolkit_repo.get_by_id(toolkit_id)
+        # Verify toolkit exists and belongs to project
+        toolkit_repo.get_by_id(toolkit_id, project_id)
         
-        tools = tool_repo.list_by_toolkit(toolkit_id)
+        tools = tool_repo.list_by_toolkit(toolkit_id, project_id)
         
         return [
             ToolListResponse.model_validate(t.model_dump()) for t in tools
@@ -554,14 +602,18 @@ def list_tools_in_toolkit(toolkit_id: str) -> list[ToolListResponse]:
     status_code=status.HTTP_201_CREATED,
     summary="Create a tool",
 )
-def create_tool(tool_data: ToolCreateRequest) -> ToolResponse:
+def create_tool(
+    tool_data: ToolCreateRequest,
+    project_id: str = Depends(verify_project_id_path),
+) -> ToolResponse:
     """Create a new tool."""
     try:
+        
         toolkit_repo = ToolkitRepository()
         tool_repo = McpToolRepository()
         
-        # Verify toolkit exists
-        toolkit_repo.get_by_id(tool_data.toolkit_id)
+        # Verify toolkit exists and belongs to project
+        toolkit_repo.get_by_id(tool_data.toolkit_id, project_id)
         
         # Generate ID
         tool_id = _generate_id()
@@ -577,6 +629,7 @@ def create_tool(tool_data: ToolCreateRequest) -> ToolResponse:
             outputSchema=tool_data.outputSchema,
             annotations=tool_data.annotations,
             is_enabled=True,  # Default to enabled
+            project_id=project_id,
         )
         
         created = tool_repo.create(tool)
@@ -600,11 +653,14 @@ def create_tool(tool_data: ToolCreateRequest) -> ToolResponse:
     status_code=status.HTTP_200_OK,
     summary="List all tools",
 )
-def list_tools() -> list[ToolListResponse]:
-    """List all tools."""
+def list_tools(
+    project_id: str = Depends(verify_project_id_path),
+) -> list[ToolListResponse]:
+    """List all tools for a project."""
     try:
+        
         repo = McpToolRepository()
-        tools = repo.list_all()
+        tools = repo.list_all(project_id=project_id)
         
         return [
             ToolListResponse.model_validate(t.model_dump()) for t in tools
@@ -623,11 +679,15 @@ def list_tools() -> list[ToolListResponse]:
     status_code=status.HTTP_200_OK,
     summary="Get a tool",
 )
-def get_tool(tool_id: str) -> ToolResponse:
+def get_tool(
+    tool_id: str,
+    project_id: str = Depends(verify_project_id_path),
+) -> ToolResponse:
     """Get a tool by ID."""
     try:
+        
         repo = McpToolRepository()
-        tool = repo.get_by_id(tool_id)
+        tool = repo.get_by_id(tool_id, project_id)
         
         return ToolResponse.model_validate(tool.model_dump())
     except NotFoundError as e:
@@ -646,14 +706,22 @@ def get_tool(tool_id: str) -> ToolResponse:
     status_code=status.HTTP_200_OK,
     summary="Update a tool",
 )
-def update_tool(tool_id: str, tool_data: ToolUpdateRequest) -> ToolResponse:
+def update_tool(
+    tool_id: str,
+    tool_data: ToolUpdateRequest,
+    project_id: str = Depends(verify_project_id_path),
+) -> ToolResponse:
     """
     Update a tool.
     
     Only name, title, description, inputSchema, outputSchema, and annotations can be updated.
     """
     try:
+        
         repo = McpToolRepository()
+        
+        # Verify tool exists and belongs to project
+        repo.get_by_id(tool_id, project_id)
         
         # Prepare update data (only include provided fields)
         update_data = {}
@@ -676,7 +744,7 @@ def update_tool(tool_id: str, tool_data: ToolUpdateRequest) -> ToolResponse:
                 detail="No fields to update"
             )
         
-        updated = repo.update(tool_id, update_data)
+        updated = repo.update(tool_id, update_data, project_id=project_id)
         
         return ToolResponse.model_validate(updated.model_dump())
     except NotFoundError as e:
@@ -696,16 +764,20 @@ def update_tool(tool_id: str, tool_data: ToolUpdateRequest) -> ToolResponse:
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete a tool",
 )
-def delete_tool(tool_id: str) -> None:
+def delete_tool(
+    tool_id: str,
+    project_id: str = Depends(verify_project_id_path),
+) -> None:
     """Delete a tool."""
     try:
+        
         repo = McpToolRepository()
         
-        # Verify it exists
-        repo.get_by_id(tool_id)
+        # Verify it exists and belongs to project
+        repo.get_by_id(tool_id, project_id)
         
         # Delete
-        deleted = repo.delete(tool_id)
+        deleted = repo.delete(tool_id, project_id=project_id)
         if not deleted:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -731,12 +803,19 @@ def delete_tool(tool_id: str) -> None:
     status_code=status.HTTP_200_OK,
     summary="Enable a tool",
 )
-def enable_tool(tool_id: str) -> ToolResponse:
+def enable_tool(
+    tool_id: str,
+    project_id: str = Depends(verify_project_id_path),
+) -> ToolResponse:
     """Enable a tool."""
     try:
+        
         repo = McpToolRepository()
         
-        updated = repo.update_enabled_status(tool_id, is_enabled=True)
+        # Verify tool exists and belongs to project
+        repo.get_by_id(tool_id, project_id)
+        
+        updated = repo.update_enabled_status(tool_id, is_enabled=True, project_id=project_id)
         
         return ToolResponse.model_validate(updated.model_dump())
     except NotFoundError as e:
@@ -755,12 +834,19 @@ def enable_tool(tool_id: str) -> ToolResponse:
     status_code=status.HTTP_200_OK,
     summary="Disable a tool",
 )
-def disable_tool(tool_id: str) -> ToolResponse:
+def disable_tool(
+    tool_id: str,
+    project_id: str = Depends(verify_project_id_path),
+) -> ToolResponse:
     """Disable a tool."""
     try:
+        
         repo = McpToolRepository()
         
-        updated = repo.update_enabled_status(tool_id, is_enabled=False)
+        # Verify tool exists and belongs to project
+        repo.get_by_id(tool_id, project_id=project_id)
+        
+        updated = repo.update_enabled_status(tool_id, is_enabled=False, project_id=project_id)
         
         return ToolResponse.model_validate(updated.model_dump())
     except NotFoundError as e:

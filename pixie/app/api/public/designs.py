@@ -2,7 +2,7 @@
 import secrets
 from logging import getLogger
 
-from fastapi import APIRouter, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 
 from app.api.models.designs import (
     DesignListPaginatedResponse,
@@ -12,10 +12,11 @@ from app.api.models.designs import (
 from app.db.models.designs import Design, DesignTypeEnum
 from app.db.storage.design_repository import DesignRepository
 from app.server.exceptions import NotFoundError
+from app.server.project_access import verify_project_id_path
 
 logger = getLogger(__name__)
 
-router = APIRouter(prefix="", tags=["designs"])
+router = APIRouter(prefix="/projects/{project_id}", tags=["designs"])
 
 
 def _generate_id() -> str:
@@ -29,7 +30,10 @@ def _generate_id() -> str:
     status_code=status.HTTP_201_CREATED,
     summary="Upload a logo design",
 )
-async def upload_logo(file: UploadFile = File(...)) -> DesignResponse:
+async def upload_logo(
+    file: UploadFile = File(...),
+    project_id: str = Depends(verify_project_id_path),
+) -> DesignResponse:
     """
     Upload a logo design file.
     
@@ -72,6 +76,7 @@ async def upload_logo(file: UploadFile = File(...)) -> DesignResponse:
             content_type=file.content_type or "application/octet-stream",
             file_data=file_data,
             file_size=file_size,
+            project_id=project_id,
         )
         
         # Save to database
@@ -98,7 +103,10 @@ async def upload_logo(file: UploadFile = File(...)) -> DesignResponse:
     status_code=status.HTTP_201_CREATED,
     summary="Upload a UX design file",
 )
-async def upload_ux_design(file: UploadFile = File(...)) -> DesignResponse:
+async def upload_ux_design(
+    file: UploadFile = File(...),
+    project_id: str = Depends(verify_project_id_path),
+) -> DesignResponse:
     """
     Upload a UX design file.
     
@@ -149,6 +157,7 @@ async def upload_ux_design(file: UploadFile = File(...)) -> DesignResponse:
             content_type=file.content_type or "application/octet-stream",
             file_data=file_data,
             file_size=file_size,
+            project_id=project_id,
         )
         
         # Save to database
@@ -176,6 +185,7 @@ async def upload_ux_design(file: UploadFile = File(...)) -> DesignResponse:
     summary="List designs (paginated)",
 )
 def list_designs(
+    project_id: str = Depends(verify_project_id_path),
     limit: int = 20,
     offset: int = 0,
     design_type: DesignTypeEnum | None = None,
@@ -210,10 +220,10 @@ def list_designs(
         repo = DesignRepository()
         
         # Get paginated designs
-        designs = repo.list_paginated(limit=limit, offset=offset, design_type=design_type)
+        designs = repo.list_paginated(project_id=project_id, design_type=design_type, limit=limit, offset=offset)
         
         # Get total count
-        total = repo.count(design_type=design_type)
+        total = repo.count(design_type=design_type, project_id=project_id)
         
         # Build response items (exclude file_data)
         items = []
@@ -249,11 +259,15 @@ def list_designs(
     status_code=status.HTTP_200_OK,
     summary="Get a design",
 )
-def get_design(design_id: str) -> DesignResponse:
+def get_design(
+    design_id: str,
+    project_id: str = Depends(verify_project_id_path),
+) -> DesignResponse:
     """Get a design by ID (metadata only, without file data)."""
     try:
+        
         repo = DesignRepository()
-        design = repo.get_by_id(design_id)
+        design = repo.get_by_id(design_id, project_id=project_id)
         
         # Return response without file_data
         response_data = design.model_dump(exclude={"file_data"})
@@ -273,7 +287,10 @@ def get_design(design_id: str) -> DesignResponse:
     status_code=status.HTTP_200_OK,
     summary="Download a design file",
 )
-def download_design(design_id: str):
+def download_design(
+    design_id: str,
+    project_id: str = Depends(verify_project_id_path),
+):
     """
     Download a design file by ID.
     
@@ -283,7 +300,7 @@ def download_design(design_id: str):
         from fastapi.responses import Response
         
         repo = DesignRepository()
-        design = repo.get_by_id(design_id)
+        design = repo.get_by_id(design_id, project_id=project_id)
         
         return Response(
             content=design.file_data,
@@ -308,13 +325,16 @@ def download_design(design_id: str):
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete a design",
 )
-def delete_design(design_id: str) -> None:
+def delete_design(
+    design_id: str,
+    project_id: str = Depends(verify_project_id_path),
+) -> None:
     """Delete a design."""
     try:
         repo = DesignRepository()
-        repo.get_by_id(design_id)
+        repo.get_by_id(design_id, project_id=project_id)
         
-        deleted = repo.delete(design_id)
+        deleted = repo.delete(design_id, project_id=project_id)
         if not deleted:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,

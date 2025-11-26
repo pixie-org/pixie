@@ -1,4 +1,5 @@
-import { API_BASE_URL } from "./client";
+import { API_BASE_URL, fetchJson } from "./client";
+import { AUTH_TOKEN_KEY } from "@/lib/auth/tokenUtils";
 
 export interface Design {
   id: string;
@@ -19,53 +20,59 @@ export interface DesignsListResponse {
   has_prev: boolean;
 }
 
-// Helper function to normalize API URL
-function getApiUrl(endpoint: string): string {
-  const baseUrl = API_BASE_URL.endsWith('/') ? API_BASE_URL.slice(0, -1) : API_BASE_URL;
-  const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
-  return `${baseUrl}${cleanEndpoint}`;
-}
-
-// Helper function to parse error responses
-async function parseErrorResponse(response: Response, defaultMessage: string): Promise<string> {
-  let errorMessage = `${defaultMessage} (${response.status} ${response.statusText})`;
-  try {
-    const contentType = response.headers.get('content-type');
-    if (contentType && contentType.includes('application/json')) {
-      const error = await response.json();
-      errorMessage = error.detail || error.message || errorMessage;
-    } else {
-      const text = await response.text();
-      if (text) {
-        errorMessage = text;
-      }
-    }
-  } catch (e) {
-    console.error('Error parsing response:', e);
+// Helper function to get authenticated fetch options for file uploads
+function getAuthenticatedFetchOptions(options: RequestInit = {}): RequestInit {
+  const token = localStorage.getItem(AUTH_TOKEN_KEY);
+  const headers: Record<string, string> = {};
+  
+  // Don't set Content-Type for FormData - let browser set it with boundary
+  if (!(options.body instanceof FormData)) {
+    headers["Content-Type"] = "application/json";
   }
-  return errorMessage;
+  
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+  
+  return {
+    ...options,
+    headers: {
+      ...headers,
+      ...options.headers,
+    },
+  };
 }
 
 /**
  * Upload a logo design file
  */
-export async function uploadLogo(file: File): Promise<Design> {
+export async function uploadLogo(file: File, projectId: string): Promise<Design> {
   const formData = new FormData();
   formData.append('file', file);
 
-  const url = getApiUrl('/api/v1/designs/logo');
+  const base = API_BASE_URL.replace(/\/+$/, "");
+  const url = `${base}/api/v1/projects/${projectId}/designs/logo`;
   
   console.log('Uploading logo to:', url);
   console.log('API_BASE_URL:', API_BASE_URL);
   console.log('File:', { name: file.name, size: file.size, type: file.type });
   
-  const response = await fetch(url, {
+  const response = await fetch(url, getAuthenticatedFetchOptions({
     method: 'POST',
     body: formData,
-  });
+  }));
 
   if (!response.ok) {
-    const errorMessage = await parseErrorResponse(response, 'Failed to upload logo');
+    const errorText = await response.text();
+    let errorMessage = `Failed to upload logo (${response.status} ${response.statusText})`;
+    try {
+      const error = JSON.parse(errorText);
+      errorMessage = error.detail || error.message || errorMessage;
+    } catch {
+      if (errorText) {
+        errorMessage = errorText;
+      }
+    }
     console.error('Upload logo failed:', { url, status: response.status, statusText: response.statusText, errorMessage });
     throw new Error(errorMessage);
   }
@@ -76,22 +83,32 @@ export async function uploadLogo(file: File): Promise<Design> {
 /**
  * Upload a UX design file (Figma files, screenshots, etc.)
  */
-export async function uploadUxDesign(file: File): Promise<Design> {
+export async function uploadUxDesign(file: File, projectId: string): Promise<Design> {
   const formData = new FormData();
   formData.append('file', file);
 
-  const url = getApiUrl('/api/v1/designs/ux-design');
+  const base = API_BASE_URL.replace(/\/+$/, "");
+  const url = `${base}/api/v1/projects/${projectId}/designs/ux-design`;
   
   console.log('Uploading UX design to:', url);
   console.log('File:', { name: file.name, size: file.size, type: file.type });
   
-  const response = await fetch(url, {
+  const response = await fetch(url, getAuthenticatedFetchOptions({
     method: 'POST',
     body: formData,
-  });
+  }));
 
   if (!response.ok) {
-    const errorMessage = await parseErrorResponse(response, 'Failed to upload UX design');
+    const errorText = await response.text();
+    let errorMessage = `Failed to upload UX design (${response.status} ${response.statusText})`;
+    try {
+      const error = JSON.parse(errorText);
+      errorMessage = error.detail || error.message || errorMessage;
+    } catch {
+      if (errorText) {
+        errorMessage = errorText;
+      }
+    }
     console.error('Upload UX design failed:', { url, status: response.status, statusText: response.statusText, errorMessage });
     throw new Error(errorMessage);
   }
@@ -102,62 +119,56 @@ export async function uploadUxDesign(file: File): Promise<Design> {
 /**
  * List all designs with optional filtering by type
  */
-export async function listDesigns(designType?: "logo" | "ux_design"): Promise<DesignsListResponse> {
+export async function listDesigns(designType: "logo" | "ux_design" | undefined, projectId: string): Promise<DesignsListResponse> {
   const params = new URLSearchParams({ limit: '100', offset: '0' });
   if (designType) {
     params.append('design_type', designType);
   }
 
-  const url = getApiUrl(`/api/v1/designs?${params}`);
-  const response = await fetch(url);
-  
-  if (!response.ok) {
-    const errorMessage = await parseErrorResponse(response, 'Failed to fetch designs');
-    throw new Error(errorMessage);
-  }
-  
-  return response.json();
+  return fetchJson<DesignsListResponse>(`/api/v1/projects/${projectId}/designs?${params.toString()}`);
 }
 
 /**
  * Get metadata for a specific design
  */
-export async function getDesign(designId: string): Promise<Design> {
-  const url = getApiUrl(`/api/v1/designs/${designId}`);
-  const response = await fetch(url);
-  
-  if (!response.ok) {
-    const errorMessage = await parseErrorResponse(response, 'Failed to fetch design');
-    throw new Error(errorMessage);
-  }
-  
-  return response.json();
+export async function getDesign(designId: string, projectId: string): Promise<Design> {
+  return fetchJson<Design>(`/api/v1/projects/${projectId}/designs/${designId}`);
 }
 
 /**
  * Delete a design
  */
-export async function deleteDesign(designId: string): Promise<void> {
-  const url = getApiUrl(`/api/v1/designs/${designId}`);
-  const response = await fetch(url, {
+export async function deleteDesign(designId: string, projectId: string): Promise<void> {
+  return fetchJson<void>(`/api/v1/projects/${projectId}/designs/${designId}`, {
     method: 'DELETE',
   });
-
-  if (!response.ok) {
-    const errorMessage = await parseErrorResponse(response, 'Failed to delete design');
-    throw new Error(errorMessage);
-  }
 }
 
 /**
  * Download a design file
  */
-export async function downloadDesign(designId: string, filename: string): Promise<void> {
-  const url = getApiUrl(`/api/v1/designs/${designId}/download`);
-  const response = await fetch(url);
+export async function downloadDesign(designId: string, filename: string, projectId: string): Promise<void> {
+  const base = API_BASE_URL.replace(/\/+$/, "");
+  const token = localStorage.getItem(AUTH_TOKEN_KEY);
+  const url = `${base}/api/v1/projects/${projectId}/designs/${designId}/download`;
+  
+  const response = await fetch(url, {
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
   
   if (!response.ok) {
-    const errorMessage = await parseErrorResponse(response, 'Failed to download design');
+    const errorText = await response.text();
+    let errorMessage = `Failed to download design (${response.status} ${response.statusText})`;
+    try {
+      const error = JSON.parse(errorText);
+      errorMessage = error.detail || error.message || errorMessage;
+    } catch {
+      if (errorText) {
+        errorMessage = errorText;
+      }
+    }
     throw new Error(errorMessage);
   }
 

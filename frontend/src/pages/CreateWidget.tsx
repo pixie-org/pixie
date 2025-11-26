@@ -14,15 +14,15 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Sparkles, Wand2, ArrowLeft, Loader2, X } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { createWidget, listWidgets } from "@/lib/api/widgets";
 import { listToolkits, listToolkitTools, type Toolkit } from "@/lib/api/tools";
-import { DEFAULT_PROJECT_ID } from "@/lib/api/client";
 import type { Tool } from "@/components/ToolsList";
 
 const CreateWidget = () => {
   const navigate = useNavigate();
+  const { projectId: urlProjectId } = useParams<{ projectId: string }>();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [createPrompt, setCreatePrompt] = useState("");
@@ -43,7 +43,8 @@ const CreateWidget = () => {
     const fetchToolkits = async () => {
       try {
         setIsLoadingToolkits(true);
-        const toolkitsData = await listToolkits(DEFAULT_PROJECT_ID);
+        const projectId = urlProjectId as string;
+        const toolkitsData = await listToolkits(projectId);
         setToolkits(toolkitsData);
       } catch (err: any) {
         console.error("Failed to load toolkits:", err);
@@ -54,7 +55,7 @@ const CreateWidget = () => {
     };
 
     fetchToolkits();
-  }, []);
+  }, [urlProjectId]);
 
   // Fetch tools when toolkit is selected
   useEffect(() => {
@@ -66,7 +67,8 @@ const CreateWidget = () => {
 
       try {
         setIsLoadingTools(true);
-        const toolsData = await listToolkitTools(selectedToolkitId);
+        const projectId = urlProjectId as string;
+        const toolsData = await listToolkitTools(selectedToolkitId, projectId);
         setTools(toolsData);
       } catch (err: any) {
         console.error("Failed to load tools:", err);
@@ -78,7 +80,7 @@ const CreateWidget = () => {
     };
 
     fetchTools();
-  }, [selectedToolkitId]);
+  }, [selectedToolkitId, urlProjectId]);
 
   // Auto-resize textareas
   useEffect(() => {
@@ -133,12 +135,13 @@ const CreateWidget = () => {
     const widgetName = name.trim();
 
     try {
+      const projectId = urlProjectId as string;
       await createWidget({
         name: widgetName,
         description: description.trim() || "",
         tool_ids: selectedToolIds,
         create_prompt: createPrompt.trim(),
-      });
+      }, projectId);
 
       // Response is {status: "ok"}, so we need to fetch the widget to get its ID
       // Fetch widgets and find the one we just created by name
@@ -148,7 +151,7 @@ const CreateWidget = () => {
       const limit = 20;
 
       while (offset < 100 && !widgetId) {
-        const widgetsResponse = await listWidgets(limit, offset);
+        const widgetsResponse = await listWidgets(projectId, limit, offset);
         const foundWidget = widgetsResponse.items.find(w => w.name === widgetName);
 
         if (foundWidget) {
@@ -164,10 +167,10 @@ const CreateWidget = () => {
       }
 
       if (widgetId) {
-        navigate(`/widgets/${widgetId}/edit-ux`);
+        navigate(`/projects/${projectId}/widgets/${widgetId}/edit-ux`);
       } else {
         // Fallback: navigate to widgets list if we can't find the widget
-        navigate("/widgets");
+        navigate(`/projects/${projectId}/widgets`);
       }
     } catch (err: any) {
       console.error("Failed to create widget:", err);
@@ -182,7 +185,10 @@ const CreateWidget = () => {
     <div className="flex flex-col h-[calc(100vh-4rem)]">
       {/* Header */}
       <div className="flex items-center gap-4 mb-4 flex-shrink-0">
-        <Button variant="ghost" size="icon" onClick={() => navigate("/widgets")}>
+        <Button variant="ghost" size="icon" onClick={() => {
+          const projectId = urlProjectId as string;
+          navigate(`/projects/${projectId}/widgets`);
+        }}>
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <h1 className="text-2xl font-semibold">Create Widget</h1>

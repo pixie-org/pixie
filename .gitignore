@@ -8,3 +8,6 @@ env/
 
 # Node.js
 node_modules/
+
+# Development utilities
+dev-utils/

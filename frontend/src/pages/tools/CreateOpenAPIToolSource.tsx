@@ -9,6 +9,7 @@ import { ArrowLeft, Upload } from "lucide-react";
 import { createToolkitSource, type ToolkitSourceDetail } from "@/lib/api/tools";
 
 interface CreateOpenAPIToolSourceProps {
+  projectId: string;
   onSuccess?: (source: ToolkitSourceDetail) => void;
   onCancel?: () => void;
   showBackButton?: boolean;
@@ -17,12 +18,13 @@ interface CreateOpenAPIToolSourceProps {
 }
 
 const CreateOpenAPIToolSource = ({
+  projectId,
   onSuccess,
   onCancel,
   showBackButton = true,
   buttonText = "Create Source",
   inDialog = false
-}: CreateOpenAPIToolSourceProps = {}) => {
+}: CreateOpenAPIToolSourceProps) => {
   const navigate = useNavigate();
   const [isCreating, setIsCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
@@ -69,13 +71,13 @@ const CreateOpenAPIToolSource = ({
         },
       };
 
-      const createdSource = await createToolkitSource(sourceData);
+      const createdSource = await createToolkitSource(sourceData, projectId);
 
       if (onSuccess) {
         onSuccess(createdSource);
       } else {
-        // Navigate back to tool sources on success (default behavior)
-        navigate("/toolkit-sources");
+        // Navigate back to toolkits for this project on success (default behavior)
+        navigate(`/projects/${projectId}/toolkits`);
       }
     } catch (error: any) {
       setCreateError(error.message || "Failed to create toolkit source");
@@ -89,7 +91,7 @@ const CreateOpenAPIToolSource = ({
     if (onCancel) {
       onCancel();
     } else {
-      navigate("/toolkit-sources");
+      navigate(`/projects/${projectId}/toolkits`);
     }
   };
 

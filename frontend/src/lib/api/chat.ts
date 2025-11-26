@@ -34,10 +34,10 @@ export interface WidgetChatResponse {
     messages?: WidgetMessageData[] | null;
 }
 
-export async function getWidgetConversation(widgetId: string): Promise<ConversationResponse> {
-    return fetchJson<ConversationResponse>(`/api/v1/chat/widgets/${widgetId}/conversation`);
+export async function getWidgetConversation(widgetId: string, projectId: string): Promise<ConversationResponse> {
+    return fetchJson<ConversationResponse>(`/api/v1/projects/${projectId}/chat/widgets/${widgetId}/conversation`);
 }
 
-export async function getWidgetConversationMessages(widgetId: string, conversationId: string): Promise<WidgetMessageData[]> {
-    return fetchJson<WidgetMessageData[]>(`/api/v1/chat/widgets/${widgetId}/conversation/${conversationId}/messages`);
+export async function getWidgetConversationMessages(widgetId: string, conversationId: string, projectId: string): Promise<WidgetMessageData[]> {
+    return fetchJson<WidgetMessageData[]>(`/api/v1/projects/${projectId}/chat/widgets/${widgetId}/conversation/${conversationId}/messages`);
 }

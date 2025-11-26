@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { API_BASE_URL } from '@/lib/api';
+import { useAuth } from '@/contexts/AuthContext';
 import { type WidgetMessageData, type WidgetChatResponse, type WidgetChatInitRequest, type WidgetChatMessageRequest } from '@/lib/api';
 
 export interface ChatMessage {
@@ -13,6 +14,7 @@ export interface ChatMessage {
 
 interface UseWidgetChatOptions {
   widgetId: string;
+  projectId: string;
   enabled?: boolean;
 }
 
@@ -29,8 +31,10 @@ interface UseWidgetChatReturn {
 
 export function useWidgetChat({
   widgetId,
+  projectId,
   enabled = true,
 }: UseWidgetChatOptions): UseWidgetChatReturn {
+  const { token, guestModeEnabled } = useAuth();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [uiResourceId, setUiResourceId] = useState<string | null>(null);
@@ -42,12 +46,14 @@ export function useWidgetChat({
   const reconnectAttemptsRef = useRef(0);
   const maxReconnectAttempts = 5;
   const widgetIdRef = useRef(widgetId);
+  const projectIdRef = useRef(projectId);
   const enabledRef = useRef(enabled);
 
   useEffect(() => {
     widgetIdRef.current = widgetId;
+    projectIdRef.current = projectId;
     enabledRef.current = enabled;
-  }, [widgetId, enabled]);
+  }, [widgetId, projectId, enabled]);
 
   // Convert WidgetMessageData to ChatMessage
   const convertMessage = useCallback((msg: WidgetMessageData): ChatMessage => {
@@ -61,24 +67,46 @@ export function useWidgetChat({
     };
   }, []);
 
-  const getWebSocketUrl = useCallback(() => {
-    try {
-      const url = new URL(API_BASE_URL);
-      const protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
-      return `${protocol}//${url.host}${url.pathname ? url.pathname : ''}/api/v1/chat/widgets/ws`.replace(/\/+/g, '/').replace(':/', '://');
-    } catch {
-      // Fallback for simple URL format
-      const wsUrl = API_BASE_URL.replace(/^https?:\/\//, '');
-      const protocol = API_BASE_URL.startsWith('https') ? 'wss' : 'ws';
-      return `${protocol}://${wsUrl}/api/v1/chat/widgets/ws`;
-    }
-  }, []);
+  const getWebSocketUrl = useCallback(
+    (currentProjectId: string, authToken: string | null, isGuestMode: boolean) => {
+      try {
+        const apiUrl = new URL(API_BASE_URL);
+        const protocol = apiUrl.protocol === 'https:' ? 'wss:' : 'ws:';
+        const base = `${protocol}//${apiUrl.host}${apiUrl.pathname ? apiUrl.pathname : ''}/api/v1/projects/${currentProjectId}/chat/widgets/ws`
+          .replace(/\/+/g, '/')
+          .replace(':/', '://');
+
+        // In non-guest mode, attach JWT as `token` query param for WebSocket auth
+        if (!isGuestMode && authToken) {
+          const wsUrl = new URL(base);
+          wsUrl.searchParams.set('token', authToken);
+          return wsUrl.toString();
+        }
+
+        return base;
+      } catch {
+        // Fallback for simple URL format
+        const wsBase = API_BASE_URL.replace(/^https?:\/\//, '');
+        const protocol = API_BASE_URL.startsWith('https') ? 'wss' : 'ws';
+        let url = `${protocol}://${wsBase}/api/v1/projects/${currentProjectId}/chat/widgets/ws`;
+
+        if (!isGuestMode && authToken) {
+          const separator = url.includes('?') ? '&' : '?';
+          url = `${url}${separator}token=${encodeURIComponent(authToken)}`;
+        }
+
+        return url;
+      }
+    },
+    [],
+  );
 
   const connect = useCallback(() => {
     const currentWidgetId = widgetIdRef.current;
+    const currentProjectId = projectIdRef.current;
     const currentEnabled = enabledRef.current;
     
-    if (!currentWidgetId || !currentEnabled) return;
+    if (!currentWidgetId || !currentProjectId || !currentEnabled) return;
 
     // Don't reconnect if we already have an active connection
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
@@ -96,7 +124,7 @@ export function useWidgetChat({
     reconnectAttemptsRef.current = 0;
 
     try {
-      const wsUrl = getWebSocketUrl();
+      const wsUrl = getWebSocketUrl(currentProjectId, token, guestModeEnabled);
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 

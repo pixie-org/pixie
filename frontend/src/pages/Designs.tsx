@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useParams } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -27,9 +28,13 @@ import {
   downloadDesign as downloadDesignApi,
   type Design,
 } from "@/lib/api/design";
+import { useProject } from "@/contexts/ProjectContext";
 
 const Designs = () => {
   const { toast } = useToast();
+  const { /* selectedProject, */ isLoading, projects } = useProject();
+  const { projectId: urlProjectId } = useParams<{ projectId: string }>();
+  const projectId = urlProjectId as string;
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [logoFile, setLogoFile] = useState<File | null>(null);
@@ -44,9 +49,16 @@ const Designs = () => {
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const fetchDesigns = async (designType?: "logo" | "ux_design") => {
+    // If there are no projects, surface a clear message and skip calling the API
+    if (!projects || projects.length === 0) {
+      setDesigns([]);
+      setSaveError("No projects available. Please create a project first.");
+      return;
+    }
+
     setIsLoadingDesigns(true);
     try {
-      const data = await listDesigns(designType);
+      const data = await listDesigns(designType, projectId);
       setDesigns(data.items);
     } catch (error: any) {
       setSaveError(error.message || 'Failed to fetch designs');
@@ -62,7 +74,7 @@ const Designs = () => {
     
     setDeletingId(designId);
     try {
-      await deleteDesignApi(designId);
+      await deleteDesignApi(designId, projectId);
 
       // Show success toast
       toast({
@@ -87,7 +99,7 @@ const Designs = () => {
 
   const downloadDesign = async (design: Design) => {
     try {
-      await downloadDesignApi(design.id, design.filename);
+      await downloadDesignApi(design.id, design.filename, projectId);
 
       toast({
         title: "Download started",
@@ -105,8 +117,10 @@ const Designs = () => {
   };
 
   useEffect(() => {
-    fetchDesigns();
-  }, []);
+    if (!isLoading && projects && projects.length > 0) {
+      fetchDesigns();
+    }
+  }, [isLoading, projects]);
 
   const handleLogoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -192,17 +206,17 @@ const Designs = () => {
 
       // Upload logo if provided
       if (logoFile) {
-        uploadPromises.push(uploadLogo(logoFile));
+        uploadPromises.push(uploadLogo(logoFile, projectId));
       }
 
       // Upload Figma file as UX design if provided
       if (figmaFile) {
-        uploadPromises.push(uploadUxDesign(figmaFile));
+        uploadPromises.push(uploadUxDesign(figmaFile, projectId));
       }
 
       // Upload UX screenshot if provided
       if (uxScreenshotFile) {
-        uploadPromises.push(uploadUxDesign(uxScreenshotFile));
+        uploadPromises.push(uploadUxDesign(uxScreenshotFile, projectId));
       }
 
       await Promise.all(uploadPromises);

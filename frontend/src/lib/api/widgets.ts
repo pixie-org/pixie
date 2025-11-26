@@ -1,4 +1,5 @@
 import { API_BASE_URL, fetchJson } from "./client";
+import { AUTH_TOKEN_KEY } from "@/lib/auth/tokenUtils";
 
 export interface WidgetListResponse {
     id: string;
@@ -52,58 +53,101 @@ export interface UiWidgetResourceResponse {
     resource: Record<string, unknown>;
 }
 
-export interface WidgetDeploymentResponse {
-    id: string;
-    created_at: string | null;
-    updated_at: string | null;
-    widget_id: string;
-    deployment_type: "local";
-    deployment_url: string;
-    deployment_status: "active" | "deploying" | "suspended" | "error" | "deleted";
-}
 
-export interface WidgetDeploymentListResponse {
-    id: string;
-    widget_id: string;
-    deployment_type: "local";
-    deployment_status: "active" | "deploying" | "suspended" | "error" | "deleted";
-    created_at: string | null;
-}
-
-export async function listWidgets(limit = 20, offset = 0): Promise<WidgetListPaginatedResponse> {
+export async function listWidgets(projectId: string, limit = 20, offset = 0): Promise<WidgetListPaginatedResponse> {
     const params = new URLSearchParams({
         limit: limit.toString(),
         offset: offset.toString(),
     });
-    return fetchJson<WidgetListPaginatedResponse>(`/api/v1/widgets?${params.toString()}`);
+    return fetchJson<WidgetListPaginatedResponse>(`/api/v1/projects/${projectId}/widgets?${params.toString()}`);
 }
 
-export async function createWidget(widgetData: WidgetCreate): Promise<WidgetCreateResponse> {
-    return fetchJson<WidgetCreateResponse>(`/api/v1/widgets`, {
+export async function createWidget(widgetData: WidgetCreate, projectId: string): Promise<WidgetCreateResponse> {
+    return fetchJson<WidgetCreateResponse>(`/api/v1/projects/${projectId}/widgets`, {
         method: "POST",
         body: JSON.stringify(widgetData),
     });
 }
 
-export async function getWidget(widgetId: string): Promise<WidgetResponse> {
-    return fetchJson<WidgetResponse>(`/api/v1/widgets/${widgetId}`);
+export async function getWidget(widgetId: string, projectId: string): Promise<WidgetResponse> {
+    return fetchJson<WidgetResponse>(`/api/v1/projects/${projectId}/widgets/${widgetId}`);
 }
 
-export async function updateWidget(widgetId: string, widgetData: WidgetUpdate): Promise<WidgetResponse> {
-    return fetchJson<WidgetResponse>(`/api/v1/widgets/${widgetId}`, {
+export async function updateWidget(widgetId: string, widgetData: WidgetUpdate, projectId: string): Promise<WidgetResponse> {
+    return fetchJson<WidgetResponse>(`/api/v1/projects/${projectId}/widgets/${widgetId}`, {
         method: "PATCH",
         body: JSON.stringify(widgetData),
     });
 }
 
-export async function deleteWidget(widgetId: string): Promise<void> {
-    return fetchJson<void>(`/api/v1/widgets/${widgetId}`, {
+export async function deleteWidget(widgetId: string, projectId: string): Promise<void> {
+    return fetchJson<void>(`/api/v1/projects/${projectId}/widgets/${widgetId}`, {
         method: "DELETE",
     });
 }
 
-export async function getUiWidgetResource(resourceId: string): Promise<UiWidgetResourceResponse> {
-    return fetchJson<UiWidgetResourceResponse>(`/api/v1/ui-widget-resources/${resourceId}`);
+export async function getUiWidgetResource(resourceId: string, projectId: string): Promise<UiWidgetResourceResponse> {
+    return fetchJson<UiWidgetResourceResponse>(`/api/v1/projects/${projectId}/ui-widget-resources/${resourceId}`);
+}
+
+
+export interface SetWidgetResourceRequest {
+    ui_widget_resource_id: string;
+}
+
+export async function setWidgetResource(widgetId: string, resourceId: string, projectId: string): Promise<WidgetResponse> {
+    return fetchJson<WidgetResponse>(`/api/v1/projects/${projectId}/widgets/${widgetId}/set-resource`, {
+        method: "POST",
+        body: JSON.stringify({
+            ui_widget_resource_id: resourceId,
+        } as SetWidgetResourceRequest),
+    });
+}
+
+// MCP Tool Call API Types and Functions
+export interface McpToolCallRequest {
+    tool_name: string;
+    tool_params: Record<string, unknown>;
+}
+
+export interface McpToolCallResult {
+    content: string[];
+    structuredContent: Record<string, unknown>;
+    isError: boolean;
+}
+
+export interface McpToolCallResponse {
+    tool_name: string;
+    tool_params: Record<string, unknown>;
+    result: McpToolCallResult | null;
+    error: string | null;
+}
+
+
+export async function callMcpToolViaWidget(
+    widgetId: string,
+    toolName: string,
+    projectId: string,
+    toolParams: Record<string, unknown> = {}
+): Promise<McpToolCallResult> {
+    const response = await fetchJson<McpToolCallResponse>(`/api/v1/projects/${projectId}/mcp-tool-call/widget/${widgetId}`, {
+        method: "POST",
+        body: JSON.stringify({
+            tool_name: toolName,
+            tool_params: toolParams,
+        } as McpToolCallRequest),
+    });
+    return response.result || {
+        content: [],
+        structuredContent: {},
+        isError: false,
+    };
+}
+
+export interface WidgetDeploymentArchive {
+    blob: Blob;
+    filename: string;
+    deploymentType: string | null;
 }
 
 const DEPLOYMENT_DOWNLOAD_HEADER = "content-disposition";
@@ -131,18 +175,15 @@ const getFilenameFromDisposition = (disposition: string | null, fallback: string
     return fallback;
 };
 
-export interface WidgetDeploymentArchive {
-    blob: Blob;
-    filename: string;
-    deploymentType: string | null;
-}
-
-export async function downloadWidgetDeploymentArchive(widgetId: string): Promise<WidgetDeploymentArchive> {
+export async function downloadWidgetDeploymentArchive(widgetId: string, projectId: string): Promise<WidgetDeploymentArchive> {
     const base = API_BASE_URL.replace(/\/+$/, "");
-    const response = await fetch(`${base}/api/v1/widgets/${widgetId}/deployments`, {
+    const token = localStorage.getItem(AUTH_TOKEN_KEY);
+
+    const response = await fetch(`${base}/api/v1/projects/${projectId}/widgets/${widgetId}/deployments`, {
         method: "POST",
         headers: {
             Accept: "application/zip",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
     });
 
@@ -159,94 +200,4 @@ export async function downloadWidgetDeploymentArchive(widgetId: string): Promise
     const deploymentType = response.headers.get(DEPLOYMENT_TYPE_HEADER);
 
     return { blob, filename, deploymentType };
-}
-
-export async function listWidgetDeployments(widgetId: string): Promise<WidgetDeploymentListResponse[]> {
-    return fetchJson<WidgetDeploymentListResponse[]>(`/api/v1/widgets/${widgetId}/deployments`);
-}
-
-export async function getWidgetDeployment(deploymentId: string): Promise<WidgetDeploymentResponse> {
-    return fetchJson<WidgetDeploymentResponse>(`/api/v1/widget-deployments/${deploymentId}`);
-}
-
-export async function deleteWidgetDeployment(deploymentId: string): Promise<void> {
-    return fetchJson<void>(`/api/v1/widget-deployments/${deploymentId}`, {
-        method: "DELETE",
-    });
-}
-
-export async function suspendWidgetDeployment(deploymentId: string): Promise<WidgetDeploymentResponse> {
-    return fetchJson<WidgetDeploymentResponse>(`/api/v1/widget-deployments/${deploymentId}/suspend`, {
-        method: "POST",
-    });
-}
-
-export interface SetWidgetResourceRequest {
-    ui_widget_resource_id: string;
-}
-
-export async function setWidgetResource(widgetId: string, resourceId: string): Promise<WidgetResponse> {
-    return fetchJson<WidgetResponse>(`/api/v1/widgets/${widgetId}/set-resource`, {
-        method: "POST",
-        body: JSON.stringify({
-            ui_widget_resource_id: resourceId,
-        } as SetWidgetResourceRequest),
-    });
-}
-
-// MCP Tool Call API Types and Functions
-export interface McpToolCallRequest {
-    tool_name: string;
-    tool_params: Record<string, unknown>;
-}
-
-export interface McpToolCallResult {
-    content: string[];
-    structuredContent: Record<string, unknown>;
-    isError: boolean;
-}
-
-export interface McpToolCallResponse {
-    tool_name: string;
-    tool_params: Record<string, unknown>;
-    result: McpToolCallResult | null;
-    error: string | null;
-}
-
-export async function callMcpToolViaDeployment(
-    deploymentId: string,
-    toolName: string,
-    toolParams: Record<string, unknown> = {}
-): Promise<McpToolCallResult> {
-    const response = await fetchJson<McpToolCallResponse>(`/api/v1/mcp-tool-call/deployment/${deploymentId}`, {
-        method: "POST",
-        body: JSON.stringify({
-            tool_name: toolName,
-            tool_params: toolParams,
-        } as McpToolCallRequest),
-    });
-    return response.result || {
-        content: [],
-        structuredContent: {},
-        isError: false,
-    };
-}
-
-export async function callMcpToolViaWidget(
-    widgetId: string,
-    toolName: string,
-    toolParams: Record<string, unknown> = {}
-): Promise<McpToolCallResult> {
-    const response = await fetchJson<McpToolCallResponse>(`/api/v1/mcp-tool-call/widget/${widgetId}`, {
-        method: "POST",
-        body: JSON.stringify({
-            tool_name: toolName,
-            tool_params: toolParams,
-        } as McpToolCallRequest),
-    });
-    return response.result || {
-        content: [],
-        structuredContent: {},
-        isError: false,
-    };
 }

@@ -32,7 +32,7 @@ import {
 } from "@/components/ui/pagination";
 import { listWidgets, getWidget, updateWidget, deleteWidget, type WidgetListResponse, type WidgetResponse } from "@/lib/api/widgets";
 import { listToolkits, listToolkitTools, type Toolkit } from "@/lib/api/tools";
-import { DEFAULT_PROJECT_ID } from "@/lib/api/client";
+import { useProject } from "@/contexts/ProjectContext";
 import type { Tool } from "@/components/ToolsList";
 import {
   Select,
@@ -49,6 +49,7 @@ const ITEMS_PER_PAGE = 20;
 
 const Widgets = () => {
   const navigate = useNavigate();
+  const { selectedProject } = useProject();
   const [widgets, setWidgets] = useState<WidgetListResponse[]>([]);
   const [total, setTotal] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
@@ -82,19 +83,22 @@ const Widgets = () => {
     if (e && (e.target as HTMLElement).closest('button')) {
       return;
     }
-    // Navigate to widget UX edit page
-    navigate(`/widgets/${widgetId}/edit-ux`);
+    if (!selectedProject) return;
+    // Navigate to widget UX edit page with project scope
+    navigate(`/projects/${selectedProject.id}/widgets/${widgetId}/edit-ux`);
   };
 
   const handleEditUX = (widgetId: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    navigate(`/widgets/${widgetId}/edit-ux`);
+    if (!selectedProject) return;
+    navigate(`/projects/${selectedProject.id}/widgets/${widgetId}/edit-ux`);
   };
 
   const handleEditDetails = async (widgetId: string, e: React.MouseEvent) => {
     e.stopPropagation();
+    if (!selectedProject) return;
     try {
-      const widget = await getWidget(widgetId);
+      const widget = await getWidget(widgetId, selectedProject.id);
       setEditingWidget(widget);
       setEditName(widget.name);
       setEditDescription(widget.description || "");
@@ -120,9 +124,10 @@ const Widgets = () => {
   };
 
   const loadToolkits = async () => {
+    if (!selectedProject) return [];
     try {
       setIsLoadingToolkits(true);
-      const toolkitsData = await listToolkits(DEFAULT_PROJECT_ID);
+      const toolkitsData = await listToolkits(selectedProject.id);
       setToolkits(toolkitsData);
       return toolkitsData;
     } catch (err: any) {
@@ -134,16 +139,17 @@ const Widgets = () => {
   };
 
   const loadToolsForSelectedIds = async (toolIds: string[]) => {
+    if (!selectedProject) return;
     // Load all toolkits and their tools to find matches
     const allTools: Tool[] = [];
     const toolsMap = new Map<string, Tool>();
 
     try {
-      const toolkitsData = await listToolkits(DEFAULT_PROJECT_ID);
+      const toolkitsData = await listToolkits(selectedProject.id);
 
       for (const toolkit of toolkitsData) {
         try {
-          const toolkitTools = await listToolkitTools(toolkit.id);
+          const toolkitTools = await listToolkitTools(toolkit.id, selectedProject.id);
           toolkitTools.forEach(tool => {
             allTools.push(tool);
             toolsMap.set(tool.id, tool);
@@ -169,14 +175,14 @@ const Widgets = () => {
 
   useEffect(() => {
     const fetchTools = async () => {
-      if (!selectedToolkitId) {
+      if (!selectedToolkitId || !selectedProject) {
         setTools([]);
         return;
       }
 
       try {
         setIsLoadingTools(true);
-        const toolsData = await listToolkitTools(selectedToolkitId);
+        const toolsData = await listToolkitTools(selectedToolkitId, selectedProject.id);
         setTools(toolsData);
       } catch (err: any) {
         console.error("Failed to load tools:", err);
@@ -187,7 +193,7 @@ const Widgets = () => {
     };
 
     fetchTools();
-  }, [selectedToolkitId]);
+  }, [selectedToolkitId, selectedProject]);
 
   const handleToolToggle = (tool: Tool) => {
     const toolId = tool.id;
@@ -214,7 +220,7 @@ const Widgets = () => {
   };
 
   const handleSaveEdit = async () => {
-    if (!editingWidget || !editName.trim()) {
+    if (!editingWidget || !editName.trim() || !selectedProject) {
       setError("Name is required");
       return;
     }
@@ -225,7 +231,7 @@ const Widgets = () => {
         name: editName.trim(),
         description: editDescription.trim() || null,
         tool_ids: editToolIds,
-      });
+      }, selectedProject.id);
 
       // Refresh widgets list
       await fetchWidgets(currentPage);
@@ -247,13 +253,13 @@ const Widgets = () => {
   };
 
   const handleDeleteConfirm = async () => {
-    if (deleteConfirmName !== deletingWidget?.name) {
+    if (deleteConfirmName !== deletingWidget?.name || !selectedProject) {
       return;
     }
 
     setIsDeleting(true);
     try {
-      await deleteWidget(deletingWidget.id);
+      await deleteWidget(deletingWidget.id, selectedProject.id);
 
       // Refresh widgets list
       await fetchWidgets(currentPage);
@@ -269,12 +275,17 @@ const Widgets = () => {
   };
 
   const fetchWidgets = async (page: number) => {
+    if (!selectedProject) {
+      setIsLoading(false);
+      return;
+    }
+
     try {
       setIsLoading(true);
       setError(null);
 
       const offset = (page - 1) * ITEMS_PER_PAGE;
-      const response = await listWidgets(ITEMS_PER_PAGE, offset);
+      const response = await listWidgets(selectedProject.id, ITEMS_PER_PAGE, offset);
       setWidgets(response.items);
       setTotal(response.total);
     } catch (err: any) {
@@ -287,14 +298,15 @@ const Widgets = () => {
 
   useEffect(() => {
     fetchWidgets(currentPage);
-  }, [currentPage]);
+  }, [currentPage, selectedProject]);
 
   const totalPages = Math.ceil(total / ITEMS_PER_PAGE);
   const startItem = total === 0 ? 0 : (currentPage - 1) * ITEMS_PER_PAGE + 1;
   const endItem = Math.min(currentPage * ITEMS_PER_PAGE, total);
 
   const handleCreateWidget = () => {
-    navigate("/widgets/create");
+    if (!selectedProject) return;
+    navigate(`/projects/${selectedProject.id}/widgets/create`);
   };
 
   if (isLoading) {

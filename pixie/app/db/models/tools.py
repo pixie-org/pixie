@@ -32,6 +32,7 @@ class ToolkitSource(BaseModel):
     source_type: ToolSourceType = Field(..., description="Type of the toolkit source")
     description: str | None = Field(default=None, description="Human-readable description of the toolkit source functionality")
     configuration: OpenApiSpecConfiguration | McpServerConfiguration = Field(..., description="Configuration of the toolkit source")
+    project_id: str = Field(..., description="Project ID that the toolkit source belongs to")
 
 class Toolkit(BaseModel):
     id: str = Field(..., description="Unique identifier for the toolkit")
@@ -40,6 +41,7 @@ class Toolkit(BaseModel):
     name: str = Field(..., description="Name of the toolkit")
     toolkit_source_id: str = Field(..., description="Toolkit source ID that the toolkit belongs to")
     description: str | None = Field(default=None, description="Description of the toolkit")
+    project_id: str = Field(..., description="Project ID that the toolkit belongs to")
 
 class Tool(BaseModel):
     """MCP-compliant tool model (reference: https://modelcontextprotocol.io/specification/2025-06-18/server/tools#tool)"""
@@ -54,3 +56,4 @@ class Tool(BaseModel):
     outputSchema: dict[str, Any] | None = Field(default=None, description="Optional JSON Schema defining expected output structure")
     annotations: dict[str, Any] | None = Field(default=None, description="Optional properties describing tool behavior")
     is_enabled: bool = Field(..., description="Whether the tool is enabled")
+    project_id: str = Field(..., description="Project ID that the tool belongs to")

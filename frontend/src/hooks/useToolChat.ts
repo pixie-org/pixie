@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { API_BASE_URL, DEFAULT_PROJECT_ID } from '@/lib/api';
+import { API_BASE_URL } from '@/lib/api';
 
 export interface ChatMessage {
   message_id?: string;
@@ -28,7 +28,7 @@ export interface WebSocketResponse {
 }
 
 interface UseToolChatOptions {
-  projectId?: string;
+  projectId: string;
   toolId: string;
   enabled?: boolean;
 }
@@ -45,7 +45,7 @@ interface UseToolChatReturn {
 }
 
 export function useToolChat({
-  projectId = DEFAULT_PROJECT_ID,
+  projectId: providedProjectId,
   toolId,
   enabled = true,
 }: UseToolChatOptions): UseToolChatReturn {
@@ -59,6 +59,7 @@ export function useToolChat({
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const reconnectAttemptsRef = useRef(0);
   const maxReconnectAttempts = 5;
+  const projectId = providedProjectId as string;
 
   // Store stable references to avoid unnecessary re-renders
   const toolIdRef = useRef(toolId);
@@ -72,26 +73,29 @@ export function useToolChat({
     enabledRef.current = enabled;
   }, [toolId, projectId, enabled]);
 
-  // Convert HTTP URL to WebSocket URL
-  const getWebSocketUrl = useCallback(() => {
+  // Convert HTTP URL to WebSocket URL (project-scoped)
+  const getWebSocketUrl = useCallback((currentProjectId: string) => {
     try {
       const url = new URL(API_BASE_URL);
       const protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
-      return `${protocol}//${url.host}${url.pathname ? url.pathname : ''}/api/v1/chat/ws`.replace(/\/+/g, '/').replace(':/', '://');
+      return `${protocol}//${url.host}${url.pathname ? url.pathname : ''}/api/v1/projects/${currentProjectId}/chat/ws`
+        .replace(/\/+/g, '/')
+        .replace(':/', '://');
     } catch {
       // Fallback for simple URL format
       const wsUrl = API_BASE_URL.replace(/^https?:\/\//, '');
       const protocol = API_BASE_URL.startsWith('https') ? 'wss' : 'ws';
-      return `${protocol}://${wsUrl}/api/v1/chat/ws`;
+      return `${protocol}://${wsUrl}/api/v1/projects/${currentProjectId}/chat/ws`;
     }
   }, []);
 
   // Connection function - uses refs internally to avoid dependency issues
   const connect = useCallback(() => {
     const currentToolId = toolIdRef.current;
+    const currentProjectId = projectIdRef.current;
     const currentEnabled = enabledRef.current;
     
-    if (!currentToolId || !currentEnabled) return;
+    if (!currentToolId || !currentProjectId || !currentEnabled) return;
 
     // Don't reconnect if we already have an active connection
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
@@ -114,7 +118,7 @@ export function useToolChat({
     reconnectAttemptsRef.current = 0;
 
     try {
-      const wsUrl = getWebSocketUrl();
+      const wsUrl = getWebSocketUrl(currentProjectId);
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 

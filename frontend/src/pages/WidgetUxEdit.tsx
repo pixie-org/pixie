@@ -10,6 +10,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { getWidget, getUiWidgetResource, downloadWidgetDeploymentArchive, setWidgetResource, type WidgetResponse } from "@/lib/api/widgets";
+import { useProject } from "@/contexts/ProjectContext";
 import { useWidgetChat } from "@/hooks/useWidgetChat";
 import { MessageContent } from "@/components/MessageContent";
 import { WidgetViewer } from "@/components/WidgetViewer";
@@ -33,7 +34,8 @@ const extractHTML = (resource: any): string | null => {
 
 const WidgetUxEdit = () => {
   const navigate = useNavigate();
-  const { widgetId } = useParams<{ widgetId: string }>();
+  const { projectId: urlProjectId, widgetId } = useParams<{ projectId: string; widgetId: string }>();
+  const effectiveProjectId = urlProjectId as string;
   const [widget, setWidget] = useState<WidgetResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -60,6 +62,7 @@ const WidgetUxEdit = () => {
     reconnect,
   } = useWidgetChat({
     widgetId: widgetId || "",
+    projectId: effectiveProjectId,
     enabled: !!widgetId && !isLoading && !!widget,
   });
 
@@ -70,12 +73,14 @@ const WidgetUxEdit = () => {
       try {
         setIsLoading(true);
         setError(null);
-        const widgetData = await getWidget(widgetId);
+        const projectId = urlProjectId as string;
+        const widgetData = await getWidget(widgetId, projectId);
         setWidget(widgetData);
 
         if (widgetData.ui_widget_resource_id) {
           try {
-            const resourceData = await getUiWidgetResource(widgetData.ui_widget_resource_id);
+            const projectId = urlProjectId as string;
+            const resourceData = await getUiWidgetResource(widgetData.ui_widget_resource_id, projectId);
             setOriginalUiResource({
               resource: resourceData.resource,
             });
@@ -92,7 +97,7 @@ const WidgetUxEdit = () => {
     };
 
     fetchWidget();
-  }, [widgetId]);
+  }, [widgetId, urlProjectId]);
 
   useEffect(() => {
     const fetchTemporaryResource = async () => {
@@ -116,7 +121,8 @@ const WidgetUxEdit = () => {
 
       if (latestResourceId) {
         try {
-          const resourceData = await getUiWidgetResource(latestResourceId);
+          const projectId = urlProjectId as string;
+          const resourceData = await getUiWidgetResource(latestResourceId, projectId);
           setTemporaryUiResource({
             resource: resourceData.resource,
           });
@@ -236,11 +242,13 @@ const WidgetUxEdit = () => {
 
     setIsSaving(true);
     try {
-      const updatedWidget = await setWidgetResource(widgetId, resourceIdToSave);
+      const projectId = urlProjectId as string;
+      const updatedWidget = await setWidgetResource(widgetId, resourceIdToSave, projectId);
       setWidget(updatedWidget);
       if (updatedWidget.ui_widget_resource_id) {
         try {
-          const resourceData = await getUiWidgetResource(updatedWidget.ui_widget_resource_id);
+          const projectId = urlProjectId as string;
+          const resourceData = await getUiWidgetResource(updatedWidget.ui_widget_resource_id, projectId);
           setOriginalUiResource({
             resource: resourceData.resource,
           });
@@ -262,7 +270,8 @@ const WidgetUxEdit = () => {
 
     setIsDownloading(true);
     try {
-      const { blob, filename } = await downloadWidgetDeploymentArchive(widgetId);
+      const projectId = urlProjectId as string;
+      const { blob, filename } = await downloadWidgetDeploymentArchive(widgetId, projectId);
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
@@ -571,6 +580,7 @@ const WidgetUxEdit = () => {
                     <WidgetViewer
                       uiResource={currentUiResource?.resource}
                       widgetId={widgetId ?? ""}
+                      projectId={effectiveProjectId}
                       key={useTemporary ? "temporary" : "original"}
                     />
                   )

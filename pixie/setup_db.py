@@ -21,8 +21,8 @@ import os
 import sys
 from pathlib import Path
 
-from psycopg import connect
 from dotenv import load_dotenv
+from psycopg import connect
 
 # Load environment variables
 # Try to load from root .env file first

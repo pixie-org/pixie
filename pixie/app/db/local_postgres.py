@@ -119,9 +119,10 @@ class LocalPostgresManager:
                 "docker", "exec", self.container_name,
                 "psql", "-U", "postgres", "-c", f"CREATE DATABASE {self.db_name};"
             ]
-            subprocess.run(
+            result = subprocess.run(
                 create_db_cmd,
                 capture_output=True,
+                text=True,
                 check=False,  # Don't fail if database already exists
                 timeout=10
             )
@@ -169,8 +170,19 @@ class LocalPostgresManager:
         except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
             pass  # Container might not exist or already be removed
     
-    def _apply_schema(self, database_url: str) -> None:
-        """Apply the database schema from schema.sql."""
+    def _apply_schema(self, database_url: str, force: bool = False) -> None:
+        """
+        Apply the database schema from schema.sql.
+        
+        This method is idempotent and safe to run multiple times. It will:
+        - Create tables/indexes/enums that don't exist
+        - Update triggers and functions (using CREATE OR REPLACE)
+        - Skip existing objects gracefully
+        
+        Args:
+            database_url: PostgreSQL connection string
+            force: If True, always apply schema even if it was recently applied
+        """
         schema_file = Path(__file__).parent / "schema.sql"
         if not schema_file.exists():
             print("Warning: schema.sql not found, skipping schema application")
@@ -180,9 +192,9 @@ class LocalPostgresManager:
             import psycopg
             with psycopg.connect(database_url) as conn:
                 with conn.cursor() as cur:
-                    with open(schema_file, "r") as f:
+                    with open(schema_file, "r", encoding="utf-8") as f:
                         schema_sql = f.read()
-                        cur.execute(schema_sql)
+                    cur.execute(schema_sql)
                     conn.commit()
             print("✓ Database schema applied successfully")
         except Exception as e:
@@ -200,6 +212,7 @@ class LocalPostgresManager:
         for port in [5432, 5433]:
             try:
                 import psycopg
+
                 # Try to connect
                 conn = psycopg.connect(
                     f"postgresql://postgres:postgres@localhost:{port}/postgres",
@@ -285,8 +298,28 @@ if __name__ == "__main__":
         port = int(os.getenv("DB_PORT", "5433"))
         manager = LocalPostgresManager(port=port)
         manager.stop_docker_postgres()
+    elif len(sys.argv) > 1 and sys.argv[1] == "apply-schema":
+        # Apply schema to existing database
+        db_name = os.getenv("DB_NAME", "pixie")
+        port = int(os.getenv("DB_PORT", "5433"))
+        database_url = os.getenv("DATABASE_URL")
+        
+        if not database_url:
+            # Try to construct URL for local database
+            if os.getenv("DB_USE_LOCAL", "false").lower() == "true":
+                database_url = f"postgresql://postgres:postgres@localhost:{port}/{db_name}"
+            else:
+                print("ERROR: DATABASE_URL environment variable is not set.")
+                print("Please set DATABASE_URL in your .env file or use DB_USE_LOCAL=true")
+                sys.exit(1)
+        
+        manager = LocalPostgresManager(db_name=db_name, port=port)
+        print(f"Applying schema to database: {database_url}")
+        manager._apply_schema(database_url, force=True)
+        print("\n✓ Schema application completed!")
     else:
         print("Usage:")
-        print("  python -m pixie.app.db.local_postgres setup  # Set up local PostgreSQL")
-        print("  python -m pixie.app.db.local_postgres stop    # Stop Docker PostgreSQL")
+        print("  python -m pixie.app.db.local_postgres setup        # Set up local PostgreSQL")
+        print("  python -m pixie.app.db.local_postgres stop         # Stop Docker PostgreSQL")
+        print("  python -m pixie.app.db.local_postgres apply-schema # Re-apply database schema")
 

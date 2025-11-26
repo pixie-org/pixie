@@ -29,14 +29,16 @@ class McpToolRepository:
         output_schema_json = json.dumps(data["outputSchema"]) if data.get("outputSchema") else None
         annotations_json = json.dumps(data["annotations"]) if data.get("annotations") else None
         
+        project_id = data["project_id"]
+        
         query = """
             INSERT INTO tool (
                 id, toolkit_id, name, title, description,
-                input_schema, output_schema, annotations, is_enabled
+                input_schema, output_schema, annotations, is_enabled, project_id
             )
             VALUES (
                 %(id)s, %(toolkit_id)s, %(name)s, %(title)s, %(description)s,
-                %(input_schema)s::jsonb, %(output_schema)s::jsonb, %(annotations)s::jsonb, %(is_enabled)s
+                %(input_schema)s::jsonb, %(output_schema)s::jsonb, %(annotations)s::jsonb, %(is_enabled)s, %(project_id)s
             )
             RETURNING *
         """
@@ -51,6 +53,7 @@ class McpToolRepository:
             "output_schema": output_schema_json,
             "annotations": annotations_json,
             "is_enabled": data.get("is_enabled", True),
+            "project_id": project_id,
         }
         
         with self._db.transaction():
@@ -61,35 +64,32 @@ class McpToolRepository:
         
         return self._convert_db_to_model(result)
 
-    def get_by_id(self, tool_id: str) -> Tool:
-        """Get a tool by ID."""
-        query = "SELECT * FROM tool WHERE id = %s"
-        
-        result = self._db.execute_fetchone(query, (tool_id,))
+    def get_by_id(self, tool_id: str, project_id: str) -> Tool:
+        """Get a tool by ID for a specific project."""
+        query = "SELECT * FROM tool WHERE id = %s AND project_id = %s"
+        result = self._db.execute_fetchone(query, (tool_id, project_id))
         
         if not result:
             raise NotFoundError(detail=f"Tool with ID '{tool_id}' not found")
         
         return self._convert_db_to_model(result)
 
-    def list_by_toolkit(self, toolkit_id: str) -> list[Tool]:
-        """List all tools in a toolkit."""
-        query = "SELECT * FROM tool WHERE toolkit_id = %s ORDER BY created_at DESC"
-        
-        results = self._db.execute_fetchall(query, (toolkit_id,))
-        
-        return [self._convert_db_to_model(row) for row in results]
-
-    def list_all(self) -> list[Tool]:
-        """List all tools."""
-        query = "SELECT * FROM tool ORDER BY created_at DESC"
-        
-        results = self._db.execute_fetchall(query)
+    def list_by_toolkit(self, toolkit_id: str, project_id: str) -> list[Tool]:
+        """List all tools in a toolkit for a specific project."""
+        query = "SELECT * FROM tool WHERE toolkit_id = %s AND project_id = %s ORDER BY created_at DESC"
+        results = self._db.execute_fetchall(query, (toolkit_id, project_id))
         
         return [self._convert_db_to_model(row) for row in results]
 
-    def update(self, tool_id: str, update_data: dict[str, Any]) -> Tool:
-        """Update a tool."""
+    def list_all(self, project_id: str) -> list[Tool]:
+        """List all tools for a specific project."""
+        query = "SELECT * FROM tool WHERE project_id = %s ORDER BY created_at DESC"
+        results = self._db.execute_fetchall(query, (project_id,))
+        
+        return [self._convert_db_to_model(row) for row in results]
+
+    def update(self, tool_id: str, update_data: dict[str, Any], project_id: str) -> Tool:
+        """Update a tool for a specific project."""
         # Remove updated_at from manual update - it's handled by database trigger
         update_data = {k: v for k, v in update_data.items() if k != "updated_at"}
         
@@ -120,7 +120,7 @@ class McpToolRepository:
         
         # Build dynamic UPDATE query
         set_clauses = []
-        params: dict[str, Any] = {"id": tool_id}
+        params: dict[str, Any] = {"id": tool_id, "project_id": project_id}
         
         for key, value in update_data.items():
             if key in ("input_schema", "output_schema", "annotations") and value is not None:
@@ -132,7 +132,7 @@ class McpToolRepository:
         query = f"""
             UPDATE tool
             SET {', '.join(set_clauses)}
-            WHERE id = %(id)s
+            WHERE id = %(id)s AND project_id = %(project_id)s
             RETURNING *
         """
         
@@ -144,25 +144,24 @@ class McpToolRepository:
         
         return self._convert_db_to_model(result)
 
-    def delete(self, tool_id: str) -> bool:
-        """Delete a tool."""
-        query = "DELETE FROM tool WHERE id = %s RETURNING id"
-        
+    def delete(self, tool_id: str, project_id: str) -> bool:
+        """Delete a tool for a specific project."""
+        query = "DELETE FROM tool WHERE id = %s AND project_id = %s RETURNING id"
         with self._db.transaction():
-            result = self._db.execute_fetchone(query, (tool_id,))
+            result = self._db.execute_fetchone(query, (tool_id, project_id))
         
         return result is not None
 
-    def update_enabled_status(self, tool_id: str, is_enabled: bool) -> Tool:
-        """Update the enabled status of a tool."""
-        query = """
+    def update_enabled_status(self, tool_id: str, is_enabled: bool, project_id: str) -> Tool:
+        """Update the enabled status of a tool for a specific project."""
+        query = f"""
             UPDATE tool
             SET is_enabled = %(is_enabled)s
-            WHERE id = %(id)s
+            WHERE id = %(id)s AND project_id = %(project_id)s
             RETURNING *
         """
         
-        params = {"id": tool_id, "is_enabled": is_enabled}
+        params = {"id": tool_id, "is_enabled": is_enabled, "project_id": project_id}
         
         with self._db.transaction():
             result = self._db.execute_fetchone(query, params)

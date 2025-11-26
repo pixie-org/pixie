@@ -17,6 +17,7 @@ class Conversation(BaseModel):
     created_at: datetime | None = Field(default=None, description="The timestamp when the conversation was created")
     updated_at: datetime | None = Field(default=None, description="The timestamp when the conversation was last updated")
     widget_id: str = Field(..., description="Widget ID that the conversation belongs to")
+    project_id: str = Field(..., description="Project ID that the conversation belongs to")
 
 class Message(BaseModel):
     """Message model representing a message in a chat conversation."""
@@ -26,4 +27,5 @@ class Message(BaseModel):
     role: MessageRole = Field(..., description="Role of the message sender")
     content: str = Field(..., description="Message content")
     ui_resource_id: str | None = Field(default=None, description="UI resource ID that the message belongs to")
+    project_id: str = Field(..., description="Project ID that the message belongs to")
 

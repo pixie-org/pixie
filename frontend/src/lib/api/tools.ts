@@ -1,4 +1,4 @@
-import { fetchJson, DEFAULT_PROJECT_ID, APIEndpointConfiguration, MCPClientConfiguration } from "./client";
+import { fetchJson, APIEndpointConfiguration, MCPClientConfiguration } from "./client";
 import type { Tool, EndpointType, MCPEndpointConfig, APIEndpointConfig } from "@/components/ToolsList";
 
 export interface ToolCreate {
@@ -196,31 +196,31 @@ export function convertToolToToolCreate(tool: Tool): ToolCreate {
 // --- Tools ---
 
 
-export async function listTools(projectId: string = DEFAULT_PROJECT_ID): Promise<ToolListResponse[]> {
-    return fetchJson<ToolListResponse[]>(`/api/v1/tools`);
+export async function listTools(projectId: string): Promise<ToolListResponse[]> {
+    return fetchJson<ToolListResponse[]>(`/api/v1/projects/${projectId}/tools`);
 }
 
 export async function getTool(
     toolId: string,
-    projectId: string = DEFAULT_PROJECT_ID
+    projectId: string
 ): Promise<ToolResponse> {
     return fetchJson<ToolResponse>(`/api/v1/projects/${projectId}/tools/${toolId}`);
 }
 
 export async function importTool(
     toolData: ToolCreate,
-    projectId: string = DEFAULT_PROJECT_ID
+    projectId: string
 ): Promise<ToolResponse> {
     return fetchJson<ToolResponse>(`/api/v1/projects/${projectId}/tools`, {
         method: "POST",
-        body: JSON.stringify({ ...toolData, project_id: projectId }),
+        body: JSON.stringify(toolData),
     });
 }
 
 export async function updateTool(
     toolId: string,
     toolData: ToolUpdate,
-    projectId: string = DEFAULT_PROJECT_ID
+    projectId: string
 ): Promise<ToolResponse> {
     return fetchJson<ToolResponse>(`/api/v1/projects/${projectId}/tools/${toolId}`, {
         method: "PATCH",
@@ -230,7 +230,7 @@ export async function updateTool(
 
 export async function deleteTool(
     toolId: string,
-    projectId: string = DEFAULT_PROJECT_ID
+    projectId: string
 ): Promise<void> {
     return fetchJson<void>(`/api/v1/projects/${projectId}/tools/${toolId}`, {
         method: "DELETE",
@@ -239,83 +239,73 @@ export async function deleteTool(
 
 export async function ensureUIResource(
     toolId: string,
-    projectId: string = DEFAULT_PROJECT_ID
+    projectId: string
 ): Promise<ToolResponse> {
     return fetchJson<ToolResponse>(`/api/v1/projects/${projectId}/tools/${toolId}/ensure-ui-resource`, {
         method: "POST",
     });
 }
 
-export async function getToolDetail(toolId: string): Promise<ToolDetailResponse> {
-    return fetchJson<ToolDetailResponse>(`/api/v1/tools/${toolId}`);
+export async function getToolDetail(toolId: string, projectId: string): Promise<ToolDetailResponse> {
+    return fetchJson<ToolDetailResponse>(`/api/v1/projects/${projectId}/tools/${toolId}`);
 }
 
-export async function deleteToolDetail(toolId: string): Promise<void> {
-    return fetchJson<void>(`/api/v1/tools/${toolId}`, {
+export async function deleteToolDetail(toolId: string, projectId: string): Promise<void> {
+    return fetchJson<void>(`/api/v1/projects/${projectId}/tools/${toolId}`, {
         method: "DELETE",
     });
 }
 
-export async function enableTool(toolId: string): Promise<void> {
-    return fetchJson<void>(`/api/v1/tools/${toolId}/enable`, {
+export async function enableTool(toolId: string, projectId: string): Promise<void> {
+    return fetchJson<void>(`/api/v1/projects/${projectId}/tools/${toolId}/enable`, {
         method: "POST",
     });
 }
 
-export async function disableTool(toolId: string): Promise<void> {
-    return fetchJson<void>(`/api/v1/tools/${toolId}/disable`, {
+export async function disableTool(toolId: string, projectId: string): Promise<void> {
+    return fetchJson<void>(`/api/v1/projects/${projectId}/tools/${toolId}/disable`, {
         method: "POST",
     });
 }
 
 // --- Toolkit Sources ---
 
-export async function listToolkitSources(projectId: string = DEFAULT_PROJECT_ID): Promise<ToolkitSource[]> {
-    return fetchJson<ToolkitSource[]>(`/api/v1/toolkit-sources`);
+export async function getToolkitSource(sourceId: string, projectId: string): Promise<ToolkitSourceDetail> {
+    return fetchJson<ToolkitSourceDetail>(`/api/v1/projects/${projectId}/toolkit-sources/${sourceId}`);
 }
 
-export async function getToolkitSource(sourceId: string): Promise<ToolkitSourceDetail> {
-    return fetchJson<ToolkitSourceDetail>(`/api/v1/toolkit-sources/${sourceId}`);
-}
-
-export async function createToolkitSource(sourceData: ToolkitSourceCreate): Promise<ToolkitSourceDetail> {
-    return fetchJson<ToolkitSourceDetail>(`/api/v1/toolkit-sources`, {
+export async function createToolkitSource(sourceData: ToolkitSourceCreate, projectId: string): Promise<ToolkitSourceDetail> {
+    return fetchJson<ToolkitSourceDetail>(`/api/v1/projects/${projectId}/toolkit-sources`, {
         method: "POST",
         body: JSON.stringify(sourceData),
     });
 }
 
-export async function deleteToolkitSource(sourceId: string): Promise<void> {
-    return fetchJson<void>(`/api/v1/toolkit-sources/${sourceId}`, {
-        method: "DELETE",
-    });
-}
-
 // --- Toolkits ---
 
-export async function listToolkits(projectId: string = DEFAULT_PROJECT_ID): Promise<Toolkit[]> {
-    return fetchJson<Toolkit[]>(`/api/v1/toolkits`);
+export async function listToolkits(projectId: string): Promise<Toolkit[]> {
+    return fetchJson<Toolkit[]>(`/api/v1/projects/${projectId}/toolkits`);
 }
 
-export async function createToolkit(toolkitData: ToolkitCreate): Promise<Toolkit> {
-    return fetchJson<Toolkit>(`/api/v1/toolkits`, {
+export async function createToolkit(toolkitData: ToolkitCreate, projectId: string): Promise<Toolkit> {
+    return fetchJson<Toolkit>(`/api/v1/projects/${projectId}/toolkits`, {
         method: "POST",
         body: JSON.stringify(toolkitData),
     });
 }
 
-export async function getToolkit(toolkitId: string): Promise<ToolkitDetail> {
-    return fetchJson<ToolkitDetail>(`/api/v1/toolkits/${toolkitId}`);
+export async function getToolkit(toolkitId: string, projectId: string): Promise<ToolkitDetail> {
+    return fetchJson<ToolkitDetail>(`/api/v1/projects/${projectId}/toolkits/${toolkitId}`);
 }
 
-export async function deleteToolkit(toolkitId: string): Promise<void> {
-    return fetchJson<void>(`/api/v1/toolkits/${toolkitId}`, {
+export async function deleteToolkit(toolkitId: string, projectId: string): Promise<void> {
+    return fetchJson<void>(`/api/v1/projects/${projectId}/toolkits/${toolkitId}`, {
         method: "DELETE",
     });
 }
 
-export async function listToolkitTools(toolkitId: string): Promise<Tool[]> {
-    const response = await fetchJson<ToolDetailResponse[]>(`/api/v1/toolkits/${toolkitId}/tools`);
+export async function listToolkitTools(toolkitId: string, projectId: string): Promise<Tool[]> {
+    const response = await fetchJson<ToolDetailResponse[]>(`/api/v1/projects/${projectId}/toolkits/${toolkitId}/tools`);
     // Convert ToolDetailResponse to Tool
     return response.map(detail => ({
         id: detail.id,

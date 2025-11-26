@@ -16,12 +16,14 @@ interface UIResource {
 interface WidgetViewerProps {
   uiResource: UIResource | null;
   widgetId: string;
+  projectId: string;
   className?: string;
 }
 
 export const WidgetViewer: React.FC<WidgetViewerProps> = ({
   uiResource,
   widgetId,
+  projectId,
   className = "w-full h-full border-0"
 }) => {
   if (!isUIResource(uiResource as any)) {
@@ -29,7 +31,7 @@ export const WidgetViewer: React.FC<WidgetViewerProps> = ({
   }
 
   const mcpToolCallable = async (toolName: string, toolParams: Record<string, unknown>) => {
-    const response = await callMcpToolViaWidget(widgetId, toolName, toolParams);
+    const response = await callMcpToolViaWidget(widgetId, toolName, projectId, toolParams);
     console.log('[WidgetViewer] Response:', response);
     return response;
   };
@@ -38,18 +40,6 @@ export const WidgetViewer: React.FC<WidgetViewerProps> = ({
     <PixieRenderer
       resource={uiResource?.resource}
       mcpToolCallable={mcpToolCallable}
-    // className={className}
-    // initialGlobals={{
-    //   toolInput: {
-    //     userId: 'widget-editor',
-    //     initialized: true,
-    //   },
-    //   theme: 'light',
-    //   widgetState: {
-    //     page: 'widget-viewer',
-    //     loaded: true,
-    //   },
-    //   }}
     />
   );
 };

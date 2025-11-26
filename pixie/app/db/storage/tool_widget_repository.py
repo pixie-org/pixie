@@ -16,17 +16,18 @@ class ToolWidgetRepository:
         """Initialize with database client."""
         self._db = db_client or db
 
-    def create(self, tool_id: str, widget_id: str) -> ToolWidget:
+    def create(self, tool_id: str, widget_id: str, project_id: str) -> ToolWidget:
         """Create a new tool_widget relationship."""
         query = """
-            INSERT INTO tool_widget (tool_id, widget_id)
-            VALUES (%(tool_id)s, %(widget_id)s)
+            INSERT INTO tool_widget (tool_id, widget_id, project_id)
+            VALUES (%(tool_id)s, %(widget_id)s, %(project_id)s)
             RETURNING *
         """
         
         params = {
             "tool_id": tool_id,
             "widget_id": widget_id,
+            "project_id": project_id,
         }
         
         with self._db.transaction():
@@ -37,21 +38,22 @@ class ToolWidgetRepository:
         
         return ToolWidget(**result)
 
-    def set_tools_for_widget(self, widget_id: str, tool_ids: list[str]) -> list[ToolWidget]:
+    def set_tools_for_widget(self, widget_id: str, tool_ids: list[str], project_id: str) -> list[ToolWidget]:
         """
         Set tools for a widget, replacing any existing relationships.
         
         Args:
             widget_id: The widget ID
             tool_ids: List of tool IDs to associate with the widget
+            project_id: The project ID
             
         Returns:
             List of created ToolWidget relationships
         """
         with self._db.transaction():
-            # Delete existing relationships for this widget
-            delete_query = "DELETE FROM tool_widget WHERE widget_id = %s"
-            self._db.execute(delete_query, (widget_id,))
+            # Delete existing relationships for this widget and project
+            delete_query = "DELETE FROM tool_widget WHERE widget_id = %s AND project_id = %s"
+            self._db.execute(delete_query, (widget_id, project_id))
             
             # Create new relationships
             relationships = []
@@ -59,12 +61,16 @@ class ToolWidgetRepository:
                 try:
                     # Use INSERT ON CONFLICT to handle duplicates gracefully
                     insert_query = """
-                        INSERT INTO tool_widget (tool_id, widget_id)
-                        VALUES (%(tool_id)s, %(widget_id)s)
-                        ON CONFLICT (tool_id, widget_id) DO NOTHING
+                        INSERT INTO tool_widget (tool_id, widget_id, project_id)
+                        VALUES (%(tool_id)s, %(widget_id)s, %(project_id)s)
+                        ON CONFLICT (tool_id, widget_id, project_id) DO NOTHING
                         RETURNING *
                     """
-                    params = {"tool_id": tool_id, "widget_id": widget_id}
+                    params = {
+                        "tool_id": tool_id,
+                        "widget_id": widget_id,
+                        "project_id": project_id,
+                    }
                     result = self._db.execute_fetchone(insert_query, params)
                     
                     if result:
@@ -76,28 +82,25 @@ class ToolWidgetRepository:
             
             return relationships
 
-    def get_by_widget_id(self, widget_id: str) -> list[ToolWidget]:
-        """Get all tool_widget relationships for a widget."""
-        query = "SELECT * FROM tool_widget WHERE widget_id = %s ORDER BY created_at DESC"
-        
-        results = self._db.execute_fetchall(query, (widget_id,))
-        
-        return [ToolWidget(**row) for row in results]
-
-    def get_by_tool_id(self, tool_id: str) -> list[ToolWidget]:
-        """Get all tool_widget relationships for a tool."""
-        query = "SELECT * FROM tool_widget WHERE tool_id = %s ORDER BY created_at DESC"
-        
-        results = self._db.execute_fetchall(query, (tool_id,))
+    def get_by_widget_id(self, widget_id: str, project_id: str) -> list[ToolWidget]:
+        """Get all tool_widget relationships for a widget in a specific project."""
+        query = "SELECT * FROM tool_widget WHERE widget_id = %s AND project_id = %s ORDER BY created_at DESC"
+        results = self._db.execute_fetchall(query, (widget_id, project_id))
         
         return [ToolWidget(**row) for row in results]
 
-    def delete(self, tool_id: str, widget_id: str) -> bool:
-        """Delete a tool_widget relationship."""
-        query = "DELETE FROM tool_widget WHERE tool_id = %s AND widget_id = %s RETURNING tool_id"
+    def get_by_tool_id(self, tool_id: str, project_id: str) -> list[ToolWidget]:
+        """Get all tool_widget relationships for a tool in a specific project."""
+        query = "SELECT * FROM tool_widget WHERE tool_id = %s AND project_id = %s ORDER BY created_at DESC"
+        results = self._db.execute_fetchall(query, (tool_id, project_id))
         
+        return [ToolWidget(**row) for row in results]
+
+    def delete(self, tool_id: str, widget_id: str, project_id: str) -> bool:
+        """Delete a tool_widget relationship for a specific project."""
+        query = "DELETE FROM tool_widget WHERE tool_id = %s AND widget_id = %s AND project_id = %s RETURNING tool_id"
         with self._db.transaction():
-            result = self._db.execute_fetchone(query, (tool_id, widget_id))
+            result = self._db.execute_fetchone(query, (tool_id, widget_id, project_id))
         
         return result is not None
 

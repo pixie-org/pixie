@@ -4,17 +4,24 @@ import logging
 import secrets
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Query,
+    WebSocket,
+    WebSocketDisconnect,
+    status,
+)
 
 from app.api.core.llm_chat import LlmChat
-from app.api.utils.llm_check import require_llm_keys
 from app.api.models.chat import (
     WidgetChatInitRequest,
     WidgetChatMessageRequest,
     WidgetChatResponse,
     WidgetMessageData,
 )
-from app.api.models.tools import ToolResponse
+from app.api.utils.llm_check import require_llm_keys
 from app.db.models.chat import Message, MessageRole
 from app.db.models.widgets import UiWidgetResource
 from app.db.storage.mcp_tool_repository import McpToolRepository
@@ -22,11 +29,12 @@ from app.db.storage.tool_widget_repository import ToolWidgetRepository
 from app.db.storage.ui_widget_resource_repository import UiWidgetResourceRepository
 from app.db.storage.widget_chat_repository import WidgetChatRepository
 from app.db.storage.widget_repository import WidgetRepository
+from app.server.project_access import verify_project_id_path, verify_project_access_for_websocket
 from app.server.exceptions import NotFoundError
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/chat/widgets", tags=["widget-chat"])
+router = APIRouter(prefix="/projects/{project_id}/chat/widgets", tags=["widget-chat"])
 
 
 def _convert_message_to_data(msg: Message) -> WidgetMessageData:
@@ -41,7 +49,9 @@ def _convert_message_to_data(msg: Message) -> WidgetMessageData:
 
 
 async def handle_widget_chat_message(
-    message_data: dict[str, Any], repository: WidgetChatRepository
+    message_data: dict[str, Any],
+    repository: WidgetChatRepository,
+    project_id: str,
 ) -> WidgetChatResponse:
     """Handle a widget chat message and return a response."""
     message_type = message_data.get("type")
@@ -50,13 +60,15 @@ async def handle_widget_chat_message(
         try:
             init_request = WidgetChatInitRequest(**message_data)
             widget_repo = WidgetRepository()
-            widget = widget_repo.get_by_id(init_request.widget_id)
+            # Verify the widget belongs to this project
+            widget = widget_repo.get_by_id(init_request.widget_id, project_id=project_id)
 
             conversation = repository.get_or_create_conversation(
-                widget_id=init_request.widget_id
+                widget_id=init_request.widget_id,
+                project_id=project_id
             )
 
-            previous_messages = repository.list_messages(conversation.id)
+            previous_messages = repository.list_messages(conversation.id, project_id=project_id)
             message_list = [_convert_message_to_data(msg) for msg in previous_messages]
 
             if not previous_messages:
@@ -64,12 +76,13 @@ async def handle_widget_chat_message(
                     conversation_id=conversation.id,
                     role="system",
                     content=f"Conversation initialized for widget: {widget.name}",
+                    project_id=project_id,
                 )
-                system_msg = repository.list_messages(conversation.id)[-1]
+                system_msg = repository.list_messages(conversation.id, project_id=project_id)[-1]
                 message_list.append(_convert_message_to_data(system_msg))
 
             resource_repo = UiWidgetResourceRepository()
-            latest_resource = resource_repo.get_latest_by_widget_id(init_request.widget_id)
+            latest_resource = resource_repo.get_latest_by_widget_id(init_request.widget_id, project_id=project_id)
             ui_resource_id = latest_resource.id if latest_resource else None
             
             is_new = len(previous_messages) == 0
@@ -100,22 +113,23 @@ async def handle_widget_chat_message(
         try:
             message_request = WidgetChatMessageRequest(**message_data)
 
-            conversation = repository.get_conversation(message_request.conversation_id)
+            conversation = repository.get_conversation(message_request.conversation_id, project_id=project_id)
 
             tool_widget_repo = ToolWidgetRepository()
-            tool_widgets = tool_widget_repo.get_by_widget_id(conversation.widget_id)
+            tool_widgets = tool_widget_repo.get_by_widget_id(conversation.widget_id, project_id=project_id)
             tool_ids = [tw.tool_id for tw in tool_widgets]
 
-            previous_messages = repository.list_messages(message_request.conversation_id)
+            previous_messages = repository.list_messages(message_request.conversation_id, project_id=project_id)
 
             repository.create_message(
                 conversation_id=message_request.conversation_id,
                 role="user",
                 content=message_request.content,
+                project_id=project_id,
             )
 
             tool_repo = McpToolRepository()
-            tools = [tool_repo.get_by_id(tool_id) for tool_id in tool_ids]
+            tools = [tool_repo.get_by_id(tool_id, project_id=project_id) for tool_id in tool_ids]
 
             llm_chat = LlmChat()
             response_text, ui_resource_dict = llm_chat.generate_response(
@@ -132,6 +146,7 @@ async def handle_widget_chat_message(
                     id=secrets.token_hex(4),
                     widget_id=conversation.widget_id,
                     resource=ui_resource_dict,
+                    project_id=project_id,
                 ))
                 ui_resource_id = created.id
 
@@ -139,6 +154,7 @@ async def handle_widget_chat_message(
                 conversation_id=message_request.conversation_id,
                 role="assistant",
                 content=response_text,
+                project_id=project_id,
                 ui_resource_id=ui_resource_id,
             )
 
@@ -166,7 +182,10 @@ async def handle_widget_chat_message(
     status_code=status.HTTP_200_OK,
     summary="Get or create conversation for a widget",
 )
-def get_widget_conversation(widget_id: str) -> dict:
+def get_widget_conversation(
+    widget_id: str,
+    project_id: str = Depends(verify_project_id_path),
+) -> dict:
     """
     Get or create a conversation for a widget.
     
@@ -177,11 +196,11 @@ def get_widget_conversation(widget_id: str) -> dict:
         widget_repo = WidgetRepository()
         chat_repo = WidgetChatRepository()
         
-        # Verify widget exists
-        widget = widget_repo.get_by_id(widget_id)
+        # Verify widget exists and belongs to project
+        widget = widget_repo.get_by_id(widget_id, project_id=project_id)
         
         # Get or create conversation
-        conversation = chat_repo.get_or_create_conversation(widget_id)
+        conversation = chat_repo.get_or_create_conversation(widget_id, project_id=project_id)
         
         return {
             "conversation_id": conversation.id,
@@ -204,14 +223,18 @@ def get_widget_conversation(widget_id: str) -> dict:
     status_code=status.HTTP_200_OK,
     summary="Get all messages for a widget conversation",
 )
-def get_widget_conversation_messages(widget_id: str, conversation_id: str) -> list[WidgetMessageData]:
+def get_widget_conversation_messages(
+    widget_id: str,
+    conversation_id: str,
+    project_id: str = Depends(verify_project_id_path),
+) -> list[WidgetMessageData]:
     """Get all messages for a widget conversation."""
     try:
         widget_repo = WidgetRepository()
         chat_repo = WidgetChatRepository()
         
-        widget_repo.get_by_id(widget_id)
-        conversation = chat_repo.get_conversation(conversation_id)
+        widget_repo.get_by_id(widget_id, project_id=project_id)
+        conversation = chat_repo.get_conversation(conversation_id, project_id=project_id)
         
         if conversation.widget_id != widget_id:
             raise HTTPException(
@@ -219,7 +242,7 @@ def get_widget_conversation_messages(widget_id: str, conversation_id: str) -> li
                 detail="Conversation not found for this widget"
             )
         
-        messages = chat_repo.list_messages(conversation_id)
+        messages = chat_repo.list_messages(conversation_id, project_id=project_id)
         
         return [_convert_message_to_data(msg) for msg in messages]
     except NotFoundError as e:
@@ -235,11 +258,14 @@ def get_widget_conversation_messages(widget_id: str, conversation_id: str) -> li
 
 
 @router.websocket("/ws")
-async def websocket_widget_chat(websocket: WebSocket):
+async def websocket_widget_chat(
+    websocket: WebSocket,
+    project_id: str,
+):
     """
     WebSocket endpoint for widget chat conversations.
     
-    **WebSocket URL**: `ws://localhost:8000/api/v1/chat/widgets/ws` (or `wss://` for secure connections)
+    **WebSocket URL**: `ws://localhost:8000/api/v1/projects/{project_id}/chat/widgets/ws` (or `wss://` for secure connections)
     
     Message Flow:
     1. Client sends init message: {"type": "init", "widget_id": "..."}
@@ -251,19 +277,20 @@ async def websocket_widget_chat(websocket: WebSocket):
     Note: The same conversation_id is returned if a conversation already exists for the
     given widget_id, allowing conversation resumption.
     """
-    await websocket.accept()
-    logger.info("WebSocket connection accepted for widget chat")
-
-    repository = WidgetChatRepository()
-
     try:
+        # Accept connection first
+        await websocket.accept()
+        verify_project_access_for_websocket(websocket, project_id)
+
+        repository = WidgetChatRepository()
+
         while True:
             data = await websocket.receive_text()
             logger.info(f"Received message: {data}")
 
             try:
                 message_data = json.loads(data)
-                response = await handle_widget_chat_message(message_data, repository)
+                response = await handle_widget_chat_message(message_data, repository, project_id=project_id)
                 response_json = response.model_dump_json(exclude_none=True)
                 await websocket.send_text(response_json)
                 logger.info(f"Sent response: {response_json}")

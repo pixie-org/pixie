@@ -4,8 +4,6 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from app.db.models.widgets import WidgetDeploymentStatusEnum, WidgetDeploymentTypeEnum
-
 # ============================================================================
 # Widget Models
 # ============================================================================
@@ -91,25 +89,3 @@ class UiWidgetResourceListResponse(BaseModel):
     created_at: datetime | None = Field(default=None, description="The timestamp when the UI resource was created")
 
 
-# ============================================================================
-# Widget Deployment Models
-# ============================================================================
-
-class WidgetDeploymentResponse(BaseModel):
-    """Schema for widget deployment response."""
-    id: str = Field(..., description="Unique identifier for the widget deployment")
-    created_at: datetime | None = Field(default=None, description="The timestamp when the widget deployment was created")
-    updated_at: datetime | None = Field(default=None, description="The timestamp when the widget deployment was last updated")
-    widget_id: str = Field(..., description="Widget ID that the widget deployment belongs to")
-    deployment_type: WidgetDeploymentTypeEnum = Field(..., description="Type of deployment (e.g. 'local')")
-    deployment_url: str = Field(..., description="URL of the deployment")
-    deployment_status: WidgetDeploymentStatusEnum = Field(..., description="Status of the deployment")
-
-
-class WidgetDeploymentListResponse(BaseModel):
-    """Schema for widget deployment list item."""
-    id: str = Field(..., description="Unique identifier for the widget deployment")
-    widget_id: str = Field(..., description="Widget ID that the widget deployment belongs to")
-    deployment_type: WidgetDeploymentTypeEnum = Field(..., description="Type of deployment")
-    deployment_status: WidgetDeploymentStatusEnum = Field(..., description="Status of the deployment")
-    created_at: datetime | None = Field(default=None, description="The timestamp when the widget deployment was created")

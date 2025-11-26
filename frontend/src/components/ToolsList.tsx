@@ -52,9 +52,21 @@ interface ToolsListProps {
   onToolDelete?: (toolId: string) => void;
   showEditButton?: boolean;
   onEditUX?: (tool: Tool) => void;
+  projectId?: string;
 }
 
-const ToolsList = ({ tools, showFilters = true, selectable = false, onSelectionChange, importButton, onToolUpdate, onToolDelete, showEditButton = true, onEditUX }: ToolsListProps) => {
+const ToolsList = ({
+  tools,
+  showFilters = true,
+  selectable = false,
+  onSelectionChange,
+  importButton,
+  onToolUpdate,
+  onToolDelete,
+  showEditButton = true,
+  onEditUX,
+  projectId,
+}: ToolsListProps) => {
   const [query, setQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -265,6 +277,7 @@ const ToolsList = ({ tools, showFilters = true, selectable = false, onSelectionC
           onOpenChange={setIsEditDialogOpen}
           onSave={handleToolUpdate}
           onDelete={onToolDelete}
+          projectId={projectId}
         />
       )}
     </div>

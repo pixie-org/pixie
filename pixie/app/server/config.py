@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     )
 
     # Application
-    app_name: str = Field(default="Pixie API", description="Application name")
+    app_name: str = Field(default="Pixie", description="Application name")
     debug: bool = Field(default=False, description="Debug mode")
     version: str = Field(default="0.1.0", description="API version")
     log_level: str = Field(
@@ -89,6 +89,60 @@ class Settings(BaseSettings):
     deployment_monitor_timeout: int = Field(
         default=10,
         description="HTTP timeout in seconds for checking deployment status"
+    )
+
+    # OAuth Configuration
+    oauth_secret_key: str = Field(
+        default="change-me-in-production",
+        description="Secret key for JWT token signing (use a strong random string in production)"
+    )
+    oauth_algorithm: str = Field(
+        default="HS256",
+        description="JWT algorithm to use"
+    )
+    oauth_token_expire_minutes: int = Field(
+        default=60 * 24 * 7,  # 7 days
+        description="JWT token expiration time in minutes"
+    )
+    oauth_refresh_token_expire_days: int = Field(
+        default=30,  # 30 days
+        description="Refresh token expiration time in days"
+    )
+    oauth_refresh_token_pepper: str = Field(
+        default="change-me-refresh-pepper",
+        description="Server-side secret pepper applied when hashing refresh tokens",
+    )
+    
+    # Google OAuth
+    google_client_id: str | None = Field(
+        default=None,
+        description="Google OAuth client ID"
+    )
+    google_client_secret: str | None = Field(
+        default=None,
+        description="Google OAuth client secret"
+    )
+    
+    # GitHub OAuth
+    github_client_id: str | None = Field(
+        default=None,
+        description="GitHub OAuth client ID"
+    )
+    github_client_secret: str | None = Field(
+        default=None,
+        description="GitHub OAuth client secret"
+    )
+    
+    # Frontend URL for OAuth redirects
+    frontend_url: str = Field(
+        default="http://localhost:8080",
+        description="Frontend URL for OAuth redirects"
+    )
+    
+    # Guest mode - allows users to use the app without authentication
+    guest_mode_enabled: bool = Field(
+        default=False,
+        description="Enable guest mode (no authentication required)"
     )
 
 

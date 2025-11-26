@@ -16,10 +16,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { Download } from "lucide-react";
 import { listToolkits, createToolkit, type Toolkit, type ToolkitSourceDetail } from "@/lib/api/tools";
-import { DEFAULT_PROJECT_ID } from "@/lib/api/client";
+import { useProject } from "@/contexts/ProjectContext";
 import CreateMcpToolSource from "@/pages/tools/CreateMcpToolSource";
 import CreateOpenAPIToolSource from "@/pages/tools/CreateOpenAPIToolSource";
 
@@ -27,6 +27,8 @@ type SourceType = "mcp" | "api" | "";
 
 const Toolkits = () => {
   const navigate = useNavigate();
+  const { projectId: urlProjectId } = useParams<{ projectId: string }>();
+  const projectId = urlProjectId as string;
   const [toolkits, setToolkits] = useState<Toolkit[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -35,14 +37,14 @@ const Toolkits = () => {
   const [isImporting, setIsImporting] = useState(false);
 
   const handleToolkitClick = (toolkitId: string) => {
-    navigate(`/toolkits/${toolkitId}`);
+    navigate(`/projects/${projectId}/toolkits/${toolkitId}`);
   };
 
   const fetchToolkits = async () => {
     try {
       setIsLoading(true);
       setError(null);
-      const toolkitsData = await listToolkits(DEFAULT_PROJECT_ID);
+      const toolkitsData = await listToolkits(projectId);
       setToolkits(toolkitsData);
     } catch (err: any) {
       setError(err.message || "Failed to load toolkits");
@@ -54,7 +56,7 @@ const Toolkits = () => {
 
   useEffect(() => {
     fetchToolkits();
-  }, []);
+  }, [projectId]);
 
   useEffect(() => {
     if (!isDialogOpen) {
@@ -75,7 +77,7 @@ const Toolkits = () => {
         description: source.description || undefined,
       };
 
-      const createdToolkit = await createToolkit(toolkitData);
+      const createdToolkit = await createToolkit(toolkitData, projectId);
 
       await fetchToolkits();
       setIsDialogOpen(false);
@@ -195,6 +197,7 @@ const Toolkits = () => {
                 <div className="border-t pt-4">
                   {sourceType === "mcp" && (
                     <CreateMcpToolSource
+                      projectId={projectId}
                       onSuccess={handleSourceCreated}
                       onCancel={() => setIsDialogOpen(false)}
                       showBackButton={false}
@@ -204,6 +207,7 @@ const Toolkits = () => {
                   )}
                   {sourceType === "api" && (
                     <CreateOpenAPIToolSource
+                      projectId={projectId}
                       onSuccess={handleSourceCreated}
                       onCancel={() => setIsDialogOpen(false)}
                       showBackButton={false}

@@ -89,14 +89,14 @@ def _serialize_output_schema(output_schema: dict | None) -> str:
     else:
         return 'None'
 
-def generate_mcp_tool_function_from_tool_id(tool_id: str, server_type: WidgetServerTypeEnum) -> str:
+def generate_mcp_tool_function_from_tool_id(tool_id: str, project_id: str, server_type: WidgetServerTypeEnum) -> str:
     tool_repo = McpToolRepository()
-    tool: Tool = tool_repo.get_by_id(tool_id)
+    tool: Tool = tool_repo.get_by_id(tool_id, project_id)
 
     toolkit_repo = ToolkitRepository()
-    toolkit: Toolkit = toolkit_repo.get_by_id(tool.toolkit_id)
+    toolkit: Toolkit = toolkit_repo.get_by_id(tool.toolkit_id, project_id)
     toolkit_source_repo = ToolkitSourceRepository()
-    toolkit_source: ToolkitSource = toolkit_source_repo.get_by_id(toolkit.toolkit_source_id)
+    toolkit_source: ToolkitSource = toolkit_source_repo.get_by_id(toolkit.toolkit_source_id, project_id)
     tool_source = toolkit_source.configuration
 
     is_mcp_source = False
@@ -238,13 +238,13 @@ def _inject_script_to_head(html_content: str, script: str) -> str:
         # No HTML structure, prepend with head and script
         return f'<head>\n{script_tag}\n</head>\n{html_content}'
 
-def generate_mcp_tool_function_from_widget_id(widget_id: str, server_type: WidgetServerTypeEnum) -> str:
+def generate_mcp_tool_function_from_widget_id(widget_id: str, project_id: str, server_type: WidgetServerTypeEnum) -> str:
     widget_repo = WidgetRepository()
-    widget: Widget = widget_repo.get_by_id(widget_id)
+    widget: Widget = widget_repo.get_by_id(widget_id, project_id)
 
     function_name = generate_external_widget_id(widget)
     ui_widget_resource_repo = UiWidgetResourceRepository()
-    ui_widget_resource: UiWidgetResource = ui_widget_resource_repo.get_by_id(widget.ui_widget_resource_id)
+    ui_widget_resource: UiWidgetResource = ui_widget_resource_repo.get_by_id(widget.ui_widget_resource_id, project_id)
     html_content = ui_widget_resource.resource['resource']['text']
 
     if server_type == WidgetServerTypeEnum.OPENAI:

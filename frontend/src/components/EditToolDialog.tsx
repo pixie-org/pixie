@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { getTool, updateTool, deleteTool, convertToolResponseToTool, DEFAULT_PROJECT_ID } from "@/lib/api";
+import { getTool, updateTool, deleteTool, convertToolResponseToTool } from "@/lib/api";
 import { Trash2 } from "lucide-react";
 import {
   Dialog,
@@ -33,9 +33,10 @@ interface EditToolDialogProps {
   onOpenChange: (open: boolean) => void;
   onSave: (tool: Tool) => void;
   onDelete?: (toolId: string) => void;
+  projectId: string;
 }
 
-const EditToolDialog = ({ tool, open, onOpenChange, onSave, onDelete }: EditToolDialogProps) => {
+const EditToolDialog = ({ tool, open, onOpenChange, onSave, onDelete, projectId }: EditToolDialogProps) => {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [status, setStatus] = useState<"active" | "disabled">("active");
@@ -60,7 +61,7 @@ const EditToolDialog = ({ tool, open, onOpenChange, onSave, onDelete }: EditTool
         if (!hasFullConfig) {
           setIsLoadingTool(true);
           try {
-            const fullToolResponse = await getTool(tool.id, DEFAULT_PROJECT_ID);
+            const fullToolResponse = await getTool(tool.id, projectId);
             const fullTool = convertToolResponseToTool(fullToolResponse);
             setName(fullTool.name);
             setDescription(fullTool.description);
@@ -83,7 +84,7 @@ const EditToolDialog = ({ tool, open, onOpenChange, onSave, onDelete }: EditTool
     };
 
     loadToolDetails();
-  }, [tool]);
+  }, [tool, projectId]);
 
   const handleStatusChange = (checked: boolean) => {
     const newStatus = checked ? "active" : "disabled";
@@ -123,7 +124,7 @@ const EditToolDialog = ({ tool, open, onOpenChange, onSave, onDelete }: EditTool
       };
 
       // Call update endpoint with PATCH
-      const updatedToolResponse = await updateTool(tool.id, updateData, DEFAULT_PROJECT_ID);
+      const updatedToolResponse = await updateTool(tool.id, updateData, projectId);
       
       // Convert back to internal format
       const convertedTool = convertToolResponseToTool(updatedToolResponse);
@@ -150,7 +151,7 @@ const EditToolDialog = ({ tool, open, onOpenChange, onSave, onDelete }: EditTool
     setDeleteError(null);
 
     try {
-      await deleteTool(tool.id, DEFAULT_PROJECT_ID);
+      await deleteTool(tool.id, projectId);
       
       // Call the onDelete callback
       if (onDelete) {

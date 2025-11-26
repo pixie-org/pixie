@@ -2,7 +2,7 @@
 from logging import getLogger
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from mcp import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
 from pydantic import BaseModel, Field
@@ -12,13 +12,14 @@ from app.db.storage.mcp_tool_repository import McpToolRepository
 from app.db.storage.tool_widget_repository import ToolWidgetRepository
 from app.db.storage.toolkit_repository import ToolkitRepository
 from app.db.storage.toolkit_source_repository import ToolkitSourceRepository
-from app.db.storage.widget_deployment_repository import WidgetDeploymentRepository
+from app.db.storage.widget_repository import WidgetRepository
 from app.server.exceptions import NotFoundError
+from app.server.project_access import verify_project_id_path
 from deploy.utils import get_details_from_external_tool_id
 
 logger = getLogger(__name__)
 
-router = APIRouter(prefix="", tags=["mcp-tool-call"])
+router = APIRouter(prefix="/projects/{project_id}", tags=["mcp-tool-call"])
 
 
 class McpToolCallRequest(BaseModel):
@@ -36,89 +37,6 @@ class McpToolCallResponse(BaseModel):
 
 
 @router.post(
-    "/mcp-tool-call/deployment/{deployment_id}",
-    response_model=McpToolCallResponse,
-    status_code=status.HTTP_200_OK,
-    summary="Call MCP tool via widget deployment",
-)
-async def call_tool_via_deployment(
-    deployment_id: str,
-    request: McpToolCallRequest,
-) -> McpToolCallResponse:
-    """
-    Call an MCP tool using a widget deployment.
-    
-    This endpoint:
-    1. Finds the deployment by ID
-    2. Gets the deployment_url (assumed to be an MCP server)
-    3. Connects to it using streamable-http transport
-    4. Calls the specified tool with the provided arguments
-    
-    Args:
-        deployment_id: ID of the widget deployment
-        request: Tool call request with tool_name and arguments
-        
-    Returns:
-        Tool call result or error
-    """
-    try:
-        deployment_repo = WidgetDeploymentRepository()
-        
-        # Get deployment
-        deployment = deployment_repo.get_by_id(deployment_id)
-        deployment_url = deployment.deployment_url
-        
-        # Connect to MCP server and call tool
-        headers: dict[str, str] = {}
-        
-        try:
-            async with streamablehttp_client(
-                url=deployment_url,
-                headers=headers if headers else None,
-                timeout=30.0,
-            ) as client_data:
-                read, write, *_ = client_data
-                
-                async with ClientSession(read, write) as session:
-                    await session.initialize()
-                    
-                    # Call the tool
-                    logger.info(f"Calling tool '{request.tool_name}' on deployment {deployment_id} with parameters: {request.tool_params}")
-                    result = await session.call_tool(request.tool_name, request.tool_params)
-                    result = {
-                        'structuredContent': result.structuredContent,
-                        'content': result.content,
-                        'isError': result.isError,
-                    }
-                    return McpToolCallResponse(
-                        tool_name=request.tool_name,
-                        tool_params=request.tool_params,
-                        result=result,
-                        error=None,
-                    )
-                    
-        except Exception as e:
-            logger.exception(f"Error calling tool '{request.tool_name}' on deployment {deployment_id}: {str(e)}")
-            return McpToolCallResponse(
-                tool_name=request.tool_name,
-                tool_params=request.tool_params,
-                result=None,
-                error=f"Failed to call tool: {str(e)}",
-            )
-            
-    except NotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e.detail))
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.exception(f"Error calling tool via deployment: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to call tool via deployment: {str(e)}"
-        )
-
-
-@router.post(
     "/mcp-tool-call/widget/{widget_id}",
     response_model=McpToolCallResponse,
     status_code=status.HTTP_200_OK,
@@ -127,6 +45,7 @@ async def call_tool_via_deployment(
 async def call_tool_via_widget(
     widget_id: str,
     request: McpToolCallRequest,
+    project_id: str = Depends(verify_project_id_path),
 ) -> McpToolCallResponse:
     """
     Call an MCP tool using widget and tool IDs.
@@ -142,28 +61,38 @@ async def call_tool_via_widget(
         widget_id: ID of the widget
         tool_id: ID of the tool
         request: Tool call request with tool_name and arguments
+        project_id: Project ID (verified via dependency)
         
     Returns:
         Tool call result or error
     """
     try:
+        widget_repo = WidgetRepository()
         tool_repo = McpToolRepository()
         toolkit_repo = ToolkitRepository()
         toolkit_source_repo = ToolkitSourceRepository()
+        tool_widget_repo = ToolWidgetRepository()
+        
+        # Verify widget exists and belongs to project
+        widget_repo.get_by_id(widget_id, project_id)
         
         tool_name, toolkit_id, tool_id = get_details_from_external_tool_id(request.tool_name)
-        tool_info = tool_repo.get_by_id(tool_id)
-
-        if not tool_info:
+        tool_info = tool_repo.get_by_id(tool_id, project_id)
+        
+        # Verify tool belongs to widget
+        tool_widgets = tool_widget_repo.get_by_widget_id(widget_id, project_id)
+        tool_ids = [tw.tool_id for tw in tool_widgets]
+        if tool_id not in tool_ids:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Tool '{request.tool_name}' does not belong to widget '{widget_id}'"
             )
+
         # Get toolkit
-        toolkit = toolkit_repo.get_by_id(tool_info.toolkit_id)
+        toolkit = toolkit_repo.get_by_id(tool_info.toolkit_id, project_id)
         
         # Get toolkit_source
-        toolkit_source = toolkit_source_repo.get_by_id(toolkit.toolkit_source_id)
+        toolkit_source = toolkit_source_repo.get_by_id(toolkit.toolkit_source_id, project_id)
         
         # Validate it's an MCP server source
         if toolkit_source.source_type.value != "mcp_server":
