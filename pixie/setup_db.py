@@ -2,8 +2,12 @@
 """
 Database setup script for Pixie.
 
-This script executes the schema.sql file against the Supabase database
+This script executes the schema.sql file against a Supabase/external PostgreSQL database
 configured via the DATABASE_URL environment variable.
+
+Note: This script is only for Supabase/external databases. If DB_USE_LOCAL=true is set,
+the schema is automatically applied when the local database is set up, so this script
+will be a no-op.
 
 Usage:
     python setup_db.py
@@ -35,12 +39,23 @@ if env_local.exists():
 
 def main():
     """Execute the database schema setup."""
+    # Check if using local database - if so, this script is a no-op
+    use_local = os.getenv("DB_USE_LOCAL", "false").lower() == "true"
+    if use_local:
+        print("ℹ️  DB_USE_LOCAL is set to true.")
+        print("   The database schema is automatically applied when the local database is set up.")
+        print("   This script is not needed for local databases.")
+        print("   ✓ No action required.")
+        return
+    
     # Get database URL from environment
     database_url = os.getenv("DATABASE_URL")
     if not database_url:
         print("ERROR: DATABASE_URL environment variable is not set.")
         print("\nPlease set DATABASE_URL in your .env file:")
         print("DATABASE_URL='postgresql://postgres.[DATABASE]:[YOUR-PASSWORD]@aws-1-us-east-1.pooler.supabase.com:6543/postgres'")
+        print("\nOr if you want to use a local database, set:")
+        print("DB_USE_LOCAL=true")
         sys.exit(1)
 
     # Get the schema.sql file path

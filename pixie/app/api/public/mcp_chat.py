@@ -15,6 +15,7 @@ from app.api.models.mcp_chat import (
     McpChatResponse,
     ToolCallResult,
 )
+from app.api.utils.llm_check import require_llm_keys
 
 logger = logging.getLogger(__name__)
 
@@ -150,6 +151,9 @@ async def handle_mcp_chat_message(
             raise ValueError(f"Error adding MCP server: {str(e)}")
 
     elif message_type == "message":
+        # Check if LLM keys are configured
+        require_llm_keys()
+        
         try:
             message_request = McpChatMessageRequest(**message_data)
             session_id = message_request.session_id

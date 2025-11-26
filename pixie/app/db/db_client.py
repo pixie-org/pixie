@@ -3,14 +3,19 @@ import threading
 from contextlib import contextmanager
 from typing import Any, Iterator, Optional, Union
 
-from psycopg import Connection, Cursor
-from psycopg.rows import dict_row
-from psycopg_pool import ConnectionPool
-
 from app.server.config import load_env_files
 
 # Thread local storage for the database connection
 tls = threading.local()
+
+# Try to import PostgreSQL dependencies (optional)
+try:
+    from psycopg import Connection, Cursor
+    from psycopg.rows import dict_row
+    from psycopg_pool import ConnectionPool
+    PSYCOPG_AVAILABLE = True
+except ImportError:
+    PSYCOPG_AVAILABLE = False
 
 
 class DbClient:
@@ -21,9 +26,19 @@ class DbClient:
     Automatically handles connection and cursor management for queries.
     """
 
-    def __init__(self):
-        load_env_files()
-        self.db_url = os.getenv("DATABASE_URL")
+    def __init__(self, db_url: Optional[str] = None):
+        """
+        Initialize the database client.
+        
+        Args:
+            db_url: Optional database URL. If not provided, reads from DATABASE_URL env var.
+                   Note: Environment files should be loaded before calling this if db_url is None.
+        """
+        if not PSYCOPG_AVAILABLE:
+            raise ImportError("psycopg is required for DbClient. Install it with: pip install psycopg[binary] psycopg-pool")
+        
+        # Use provided db_url or read from environment
+        self.db_url = db_url or os.getenv("DATABASE_URL")
         if not self.db_url:
             raise ValueError("DATABASE_URL environment variable is not set")
         self.pool = ConnectionPool(self.db_url, open=True)
@@ -152,4 +167,45 @@ class DbClient:
             conn.rollback()
             raise
 
-db: DbClient = DbClient()
+
+def get_db_client():
+    """
+    Get the appropriate database client based on environment configuration.
+    
+    If DB_USE_LOCAL is set to 'true', automatically sets up a local PostgreSQL
+    instance (Docker or local installation) and uses it.
+    
+    Otherwise, uses DATABASE_URL if set, or raises an error.
+    """
+    load_env_files()
+    database_url = os.getenv("DATABASE_URL")
+    use_local = os.getenv("DB_USE_LOCAL", "false").lower() == "true"
+    
+    # If DB_USE_LOCAL is set, set up local PostgreSQL
+    if use_local:
+        try:
+            from app.db.local_postgres import setup_local_postgres
+            database_url = setup_local_postgres()
+            # Set it in environment for this process
+            os.environ["DATABASE_URL"] = database_url
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to set up local PostgreSQL: {e}\n"
+                "Make sure Docker is installed and running, or PostgreSQL is installed locally."
+            ) from e
+    
+    # If no DATABASE_URL is set, raise an error
+    if not database_url:
+        raise ValueError(
+            "DATABASE_URL environment variable is not set.\n"
+            "Options:\n"
+            "1. Set DATABASE_URL to your PostgreSQL connection string\n"
+            "2. Set DB_USE_LOCAL=true to automatically set up a local PostgreSQL instance"
+        )
+    
+    # Use PostgreSQL - pass db_url directly to avoid reloading env files
+    return DbClient(db_url=database_url)
+
+
+# Create the default db instance
+db = get_db_client()

@@ -7,6 +7,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect, status
 
 from app.api.core.llm_chat import LlmChat
+from app.api.utils.llm_check import require_llm_keys
 from app.api.models.chat import (
     WidgetChatInitRequest,
     WidgetChatMessageRequest,
@@ -93,6 +94,9 @@ async def handle_widget_chat_message(
             raise ValueError(f"Error initializing conversation: {str(e)}")
 
     elif message_type == "message":
+        # Check if LLM keys are configured
+        require_llm_keys()
+        
         try:
             message_request = WidgetChatMessageRequest(**message_data)
 

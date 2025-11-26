@@ -2,7 +2,34 @@
 
 Create MCP apps easily with an intuitive interface for importing tools, designing widgets, and deploying them.
 
-## Workflow
+## 🚀 Quick Start
+
+```bash
+# 1. Install dependencies
+cd pixie && pip install -r requirements.txt && cd ..
+cd frontend && pnpm install && cd ..
+
+# 2. Create .env file
+echo "DB_USE_LOCAL=true" > .env
+
+# 3. Run the app
+npm run dev
+```
+
+That's it! The app will be available at http://localhost:8080
+
+> **Note**: Make sure you have [Docker](https://www.docker.com/products/docker-desktop/) installed and running for the local database. See [Prerequisites](#prerequisites) for installation instructions.
+
+## 📋 Table of Contents
+
+- [What is Pixie?](#what-is-pixie)
+- [Prerequisites](#prerequisites)
+- [Quick Start](#-quick-start)
+- [Detailed Setup](#detailed-setup)
+- [Running the Application](#running-the-application)
+- [Project Structure](#project-structure)
+
+## What is Pixie?
 
 Pixie makes it easy to create MCP apps in three simple steps:
 
@@ -21,172 +48,126 @@ Deploy your widget and make it available for use. Follow [OpenAI Apps SDK deploy
 
 ![Deploy Widget](demo/deploy.jpg)
 
-## Project Structure
-
-This project consists of:
-- **Backend**: Python FastAPI application (in `pixie/` directory)
-- **Frontend**: React + TypeScript application (in `frontend/` directory)
-
 ## Prerequisites
 
-Before you begin, ensure you have the following installed:
+- **Python 3.10+** - [Download](https://www.python.org/downloads/)
+- **Node.js and npm** - [Download](https://nodejs.org/)
+- **pnpm** - `npm install -g pnpm`
+- **Docker** (Recommended) - [Download Docker Desktop](https://www.docker.com/products/docker-desktop/)
 
-- **Python 3.10 or higher** - Required for the backend API
-- **Node.js and npm** - Required for running the development server
-- **pnpm** - Package manager for frontend dependencies (install with `npm install -g pnpm`)
-- **Supabase account** - For database hosting (free tier available)
+<details>
+<summary><strong>Docker Installation Details</strong></summary>
 
-## Setup
+**macOS:**
+- Download [Docker Desktop for Mac](https://www.docker.com/products/docker-desktop/)
+- Or: `brew install --cask docker`
 
-### 1. Create and Activate Virtual Environment (Recommended)
+**Linux:**
+- Ubuntu/Debian: `sudo apt-get update && sudo apt-get install docker.io`
+- Other: See [Docker installation guide](https://docs.docker.com/engine/install/)
 
-Create a Python virtual environment in the project root:
+**Windows:**
+- Download [Docker Desktop for Windows](https://www.docker.com/products/docker-desktop/)
 
-```bash
-python3 -m venv venv
-```
+Verify: `docker --version`
+</details>
 
-Activate the virtual environment:
+## Detailed Setup
 
-**On macOS/Linux:**
-```bash
-source venv/bin/activate
-```
+### 1. Install Dependencies
 
-**On Windows:**
-```bash
-venv\Scripts\activate
-```
-
-### 2. Install Backend Dependencies
-
-Navigate to the `pixie` directory and install Python dependencies:
-
+**Backend:**
 ```bash
 cd pixie
 pip install -r requirements.txt
 cd ..
 ```
 
-### 3. Install Frontend Dependencies
-
-Install Node.js dependencies for the frontend:
-
+**Frontend:**
 ```bash
 cd frontend
 pnpm install
 cd ..
 ```
 
-### 4. Install Root Dependencies (Optional)
-
-If you want to use npm scripts from the root directory:
-
+**Root (optional, for npm scripts):**
 ```bash
 npm install
 ```
 
-### 5. Environment Variables
+### 2. Configure Environment
 
-Create a `.env` file in the root directory with the following variables:
+Create a `.env` file in the root directory:
 
-#### Required
-- `DATABASE_URL` - Supabase connection string (transaction pooler method)
-
-#### LLM Configuration (Optional - for chat functionality)
-- `LLM_PROVIDER` - LLM provider to use: `openai` or `claude` (default: `openai`)
-- `OPENAI_API_KEY` - Your OpenAI API key (required if using OpenAI)
-- `OPENAI_MODEL` - OpenAI model to use
-- `ANTHROPIC_API_KEY` - Your Anthropic API key (required if using Claude)
-  - **Note**: Environment variable name must be exactly `ANTHROPIC_API_KEY` (case-insensitive)
-- `CLAUDE_MODEL` - Claude model to use
-
-#### Example .env file:
+**Minimal setup (local database):**
 ```env
-DATABASE_URL='postgresql://postgres.[DATABASE]:[YOUR-PASSWORD]@aws-1-us-east-1.pooler.supabase.com:6543/postgres'
+DB_USE_LOCAL=true
+```
 
-# LLM Configuration
+**With LLM support:**
+```env
+DB_USE_LOCAL=true
+
+# LLM Configuration (optional)
 LLM_PROVIDER=claude
-ANTHROPIC_API_KEY=sk-ant-your-anthropic-api-key
+ANTHROPIC_API_KEY=sk-ant-your-key
 CLAUDE_MODEL=claude-3-5-sonnet-20241022
 ```
 
-### 6. Database Setup
+**Using Supabase instead:**
+```env
+DB_USE_LOCAL=false
+DATABASE_URL=postgresql://postgres.[DATABASE]:[PASSWORD]@aws-1-us-east-1.pooler.supabase.com:6543/postgres
+```
 
-Before running the application, you need to set up the database schema in your Supabase database.
+### 3. Database Setup
 
-#### Option 1: Using the setup script (Recommended)
+**Local PostgreSQL (automatic):**
+- No setup needed! Schema is applied automatically when `DB_USE_LOCAL=true`
+- Manual setup: `python -m pixie.app.db.local_postgres setup`
+- Stop database: `python -m pixie.app.db.local_postgres stop`
 
-From the root directory, run:
-
+**Supabase/External PostgreSQL:**
 ```bash
 python pixie/setup_db.py
 ```
 
-This script will:
-- Read your `DATABASE_URL` from the `.env` file in the root directory
-- Execute the schema from `pixie/app/db/schema.sql` against your Supabase database
-- Create all necessary tables, indexes, and triggers
-
-You should see a success message when the schema is set up correctly.
-
-#### Option 2: Manual setup via Supabase Dashboard
-
-1. Open your Supabase project dashboard
-2. Navigate to the SQL Editor
-3. Copy the contents of `pixie/app/db/schema.sql`
-4. Paste and execute the SQL in the SQL Editor
-
-#### Option 3: Using psql command line
-
-If you have `psql` installed and prefer using the command line:
-
-```bash
-psql "$DATABASE_URL" -f pixie/app/db/schema.sql
-```
-
-**Note**: The schema file is idempotent - it's safe to run multiple times. It uses `CREATE TABLE IF NOT EXISTS` and `CREATE INDEX IF NOT EXISTS` statements, so existing tables won't be affected.
-
 ## Running the Application
 
-You can run the application in one of the following ways:
-
-### Option 1: Using the dev script (Recommended)
-
-From the root directory:
-
-```bash
-./dev.sh
-```
-
-This will start both the backend (FastAPI) and frontend (Vite) servers simultaneously.
-
-### Option 2: Using npm scripts from root
-
-From the root directory:
-
+**Recommended (runs both frontend and backend):**
 ```bash
 npm run dev
 ```
 
-This uses `concurrently` to run both backend and frontend.
+**Or run separately:**
 
-### Option 3: Run servers separately
-
-**Backend only:**
+Backend:
 ```bash
 cd pixie
 uvicorn app.main:app --reload
 ```
 
-**Frontend only:**
+Frontend:
 ```bash
 cd frontend
 pnpm dev
 ```
 
-## Accessing the Application
+**Access:**
+- Frontend: http://localhost:8080
+- Backend API: http://localhost:8000
 
-Once running:
-- **Backend API**: http://localhost:8000
-- **Frontend**: http://localhost:8080
+## Project Structure
+
+```
+pixie/
+├── pixie/          # Backend (Python FastAPI)
+├── frontend/       # Frontend (React + TypeScript)
+└── .env           # Environment configuration
+```
+
+## Need Help?
+
+- Check the [detailed setup guide](SETUP.md) for more information
+- Review [database configuration options](pixie/app/db/README.md)
+- Open an issue on GitHub

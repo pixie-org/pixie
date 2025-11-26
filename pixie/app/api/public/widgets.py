@@ -20,6 +20,7 @@ from app.api.models.widgets import (
     WidgetSetResourceRequest,
     WidgetUpdate,
 )
+from app.api.utils.llm_check import require_llm_keys
 from app.api.utils.widget_deployment import create_deployment
 from app.db.models.widgets import (
     UiWidgetResource,
@@ -58,6 +59,9 @@ def create_widget(widget_data: WidgetCreate) -> dict:
     processes the create_prompt as the first user message, generates a response,
     and sets the resulting UI resource on the widget.
     """
+    # Check if LLM keys are configured
+    require_llm_keys()
+    
     try:
         widget_repo = WidgetRepository()
         tool_widget_repo = ToolWidgetRepository()
