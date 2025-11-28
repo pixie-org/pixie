@@ -136,3 +136,13 @@ class ToolListResponse(BaseModel):
     title: str | None = Field(default=None, description="Optional human-readable name of the tool")
     description: str = Field(..., description="Human-readable description of functionality")
     is_enabled: bool = Field(..., description="Whether the tool is enabled")
+
+
+class ToolImportRequest(BaseModel):
+    """Schema for importing a tool (toolkit_id is provided in the URL)."""
+    name: str = Field(..., description="Unique name identifier for the tool", min_length=1)
+    title: str | None = Field(default=None, description="Optional human-readable name of the tool for display purposes")
+    description: str | None = Field(default=None, description="Optional human-readable description of functionality")
+    inputSchema: dict[str, Any] = Field(..., description="JSON Schema defining expected parameters")
+    outputSchema: dict[str, Any] | None = Field(default=None, description="Optional JSON Schema defining expected output structure")
+    annotations: dict[str, Any] | None = Field(default=None, description="Optional properties describing tool behavior")

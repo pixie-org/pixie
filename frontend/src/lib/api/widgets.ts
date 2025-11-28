@@ -104,45 +104,6 @@ export async function setWidgetResource(widgetId: string, resourceId: string, pr
     });
 }
 
-// MCP Tool Call API Types and Functions
-export interface McpToolCallRequest {
-    tool_name: string;
-    tool_params: Record<string, unknown>;
-}
-
-export interface McpToolCallResult {
-    content: string[];
-    structuredContent: Record<string, unknown>;
-    isError: boolean;
-}
-
-export interface McpToolCallResponse {
-    tool_name: string;
-    tool_params: Record<string, unknown>;
-    result: McpToolCallResult | null;
-    error: string | null;
-}
-
-
-export async function callMcpToolViaWidget(
-    widgetId: string,
-    toolName: string,
-    projectId: string,
-    toolParams: Record<string, unknown> = {}
-): Promise<McpToolCallResult> {
-    const response = await fetchJson<McpToolCallResponse>(`/api/v1/projects/${projectId}/mcp-tool-call/widget/${widgetId}`, {
-        method: "POST",
-        body: JSON.stringify({
-            tool_name: toolName,
-            tool_params: toolParams,
-        } as McpToolCallRequest),
-    });
-    return response.result || {
-        content: [],
-        structuredContent: {},
-        isError: false,
-    };
-}
 
 export interface WidgetDeploymentArchive {
     blob: Blob;

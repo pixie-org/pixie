@@ -18,7 +18,8 @@ export interface PixieRendererProps extends UIResourceRendererProps {
 
 export const PixieRenderer: React.FC<PixieRendererProps> = ({
   resource,
-  mcpToolCallable = undefined
+  mcpToolCallable = undefined,
+  ...restProps
 }) => {
 
   const handleUIAction = useCallback(async (result: UIActionResult) => {
@@ -74,6 +75,7 @@ export const PixieRenderer: React.FC<PixieRendererProps> = ({
       <UIResourceRenderer
         resource={resource}
         onUIAction={handleUIAction}
+        {...restProps}
       />
     </div>
   );

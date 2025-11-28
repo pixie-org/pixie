@@ -13,6 +13,7 @@ import { ProjectProvider } from "@/contexts/ProjectContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { ProjectRedirect } from "@/components/ProjectRedirect";
 import AuthCallback from "@/pages/AuthCallback";
+import McpOAuthCallback from "@/pages/McpOAuthCallback";
 import Landing from "@/pages/Landing";
 import Login from "@/pages/Login";
 import Waitlist from "@/pages/Waitlist";
@@ -30,6 +31,7 @@ import Metrics from "./pages/Metrics";
 import Logs from "./pages/Logs";
 import Deployments from "./pages/Deployments";
 import CreateWidget from "./pages/CreateWidget";
+import { useCallback } from "react";
 
 const queryClient = new QueryClient();
 
@@ -52,6 +54,7 @@ function AppContent() {
             </header>
             <div className="flex-1 p-4 lg:p-6">
               <Routes>
+                <Route path="/oauth/callback" element={<McpOAuthCallback />} />
                 <Route path="/" element={<ProjectRedirect />} />
                 <Route path="/projects/:projectId" element={<Index />} />
                 <Route path="/projects/:projectId/toolkits" element={<Toolkits />} />
@@ -118,6 +121,7 @@ function AppContent() {
           </header>
           <div className="flex-1 p-4 lg:p-6">
             <Routes>
+              <Route path="/oauth/callback" element={<McpOAuthCallback />} />
               <Route path="/auth/callback" element={<AuthCallback />} />
               <Route path="/projects/:projectId" element={<ProtectedRoute><Index /></ProtectedRoute>} />
               <Route path="/projects/:projectId/toolkits" element={<ProtectedRoute><Toolkits /></ProtectedRoute>} />

@@ -11,6 +11,7 @@ from mcp.client.streamable_http import streamablehttp_client
 
 from app.api.models.tools import (
     ToolCreateRequest,
+    ToolImportRequest,
     ToolkitCreate,
     ToolkitListResponse,
     ToolkitResponse,
@@ -66,17 +67,12 @@ async def create_toolkit_source(
     For OpenAPI spec sources, validates that the spec is valid JSON or YAML.
     """
     try:
-        # If MCP server source, validate connection first
         if toolkit_source_data.source_type == ToolSourceType.MCP_SERVER:
             if not isinstance(toolkit_source_data.configuration, McpServerConfiguration):
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Invalid configuration: expected McpServerConfiguration for MCP server source"
                 )
-            await validate_mcp_server_connection(toolkit_source_data.configuration)
-            logger.info(f"Successfully validated MCP server connection for source: {toolkit_source_data.name}")
-        
-        # If OpenAPI spec source, validate the spec format
         elif toolkit_source_data.source_type == ToolSourceType.OPENAPI_SPEC:
             if not isinstance(toolkit_source_data.configuration, OpenApiSpecConfiguration):
                 raise HTTPException(
@@ -84,8 +80,6 @@ async def create_toolkit_source(
                     detail="Invalid configuration: expected OpenApiSpecConfiguration for OpenAPI spec source"
                 )
             validate_openapi_spec(toolkit_source_data.configuration)
-            logger.info(f"Successfully validated OpenAPI spec for source: {toolkit_source_data.name}")
-        
         repo = ToolkitSourceRepository()
         
         # Generate ID
@@ -262,58 +256,8 @@ async def create_toolkit(
         
         created = toolkit_repo.create(toolkit)
         
-        # If MCP server source, automatically fetch and import tools
-        if toolkit_source.source_type == ToolSourceType.MCP_SERVER:
-            if not isinstance(toolkit_source.configuration, McpServerConfiguration):
-                logger.warning(
-                    f"Toolkit source {toolkit_source.id} is MCP_SERVER but configuration is not McpServerConfiguration"
-                )
-            else:
-                try:
-                    logger.info(f"Automatically importing tools from MCP server for toolkit {created.id}")
-                    mcp_tools = await fetch_tools_from_mcp_server(toolkit_source.configuration)
-                    
-                    if mcp_tools:
-                        imported_count = 0
-                        for mcp_tool in mcp_tools:
-                            try:
-                                tool_name = mcp_tool.get("name")
-                                if not tool_name:
-                                    logger.warning(f"Skipping tool without name: {mcp_tool}")
-                                    continue
-                                
-                                tool_id = _generate_id()
-                                
-                                tool = Tool(
-                                    id=tool_id,
-                                    toolkit_id=created.id,
-                                    name=tool_name,
-                                    title=mcp_tool.get("title"),
-                                    description=mcp_tool.get("description", ""),
-                                    inputSchema=mcp_tool.get("inputSchema", {}),
-                                    outputSchema=mcp_tool.get("outputSchema"),
-                                    annotations=mcp_tool.get("annotations"),
-                                    is_enabled=True,
-                                    project_id=project_id,
-                                )
-                                
-                                tool_repo.create(tool)
-                                imported_count += 1
-                            except Exception as e:
-                                tool_name = mcp_tool.get("name", "unknown")
-                                logger.error(f"Failed to create tool '{tool_name}' during toolkit creation: {str(e)}")
-                                continue
-                        
-                        logger.info(f"Imported {imported_count} tools from MCP server for toolkit {created.id}")
-                    else:
-                        logger.info(f"No tools found on MCP server for toolkit {created.id}")
-                except Exception as e:
-                    logger.exception(f"Error importing tools from MCP server during toolkit creation: {str(e)}")
-                    # Don't fail toolkit creation if tool import fails - toolkit is already created
-                    # The user can manually import tools later using the import-tools endpoint
-        
         # If OpenAPI spec source, automatically extract and import tools
-        elif toolkit_source.source_type == ToolSourceType.OPENAPI_SPEC:
+        if toolkit_source.source_type == ToolSourceType.OPENAPI_SPEC:
             if not isinstance(toolkit_source.configuration, OpenApiSpecConfiguration):
                 logger.warning(
                     f"Toolkit source {toolkit_source.id} is OPENAPI_SPEC but configuration is not OpenApiSpecConfiguration"
@@ -859,53 +803,63 @@ def disable_tool(
         )
 
 
-async def validate_mcp_server_connection(config: McpServerConfiguration) -> None:
+@router.post(
+    "/toolkits/{toolkit_id}/import-tools",
+    response_model=list[ToolResponse],
+    status_code=status.HTTP_201_CREATED,
+    summary="Import tools into a toolkit",
+)
+def import_tools_into_toolkit(
+    toolkit_id: str,
+    tools: list[ToolImportRequest],
+    project_id: str = Depends(verify_project_id_path),
+) -> list[ToolResponse]:
     """
-    Validate that we can connect to an MCP server.
+    Import tools into a toolkit.
     
-    Args:
-        config: MCP server configuration
-        
-    Raises:
-        HTTPException: If connection or protocol errors occur
+    This endpoint accepts a list of tool definitions and creates them in the specified toolkit.
     """
-    if config.transport.value != "streamable-http":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Unsupported transport type: {config.transport.value}. Only 'streamable-http' is currently supported."
-        )
-
-    headers: dict[str, str] = {}
-    if config.credentials:
-        headers = dict(config.credentials)
-    
     try:
-        async with streamablehttp_client(
-            url=config.server_url,
-            headers=headers if headers else None,
-            timeout=30.0,
-        ) as client_data:
-            read, write, *_ = client_data
-            
-            async with ClientSession(read, write) as session:
-                await session.initialize()
-                # Just verify we can list tools - this confirms the connection works
-                await session.list_tools()
-            
+        toolkit_repo = ToolkitRepository()
+        tool_repo = McpToolRepository()
+
+        toolkit_repo.get_by_id(toolkit_id, project_id)
+        
+        created_tools = []
+        for tool_data in tools:
+            try:
+                tool_id = _generate_id()
+                tool = Tool(
+                    id=tool_id,
+                    toolkit_id=toolkit_id,
+                    name=tool_data.name,
+                    title=tool_data.title,
+                    description=tool_data.description or "",
+                    inputSchema=tool_data.inputSchema,
+                    outputSchema=tool_data.outputSchema,
+                    annotations=tool_data.annotations,
+                    is_enabled=True,
+                    project_id=project_id,
+                )
+                created = tool_repo.create(tool)
+                created_tools.append(ToolResponse.model_validate(created.model_dump()))
+            except Exception as e:
+                tool_name = tool_data.name or "unknown"
+                logger.error(f"Failed to create tool '{tool_name}' during import: {str(e)}")
+                continue
+
+        logger.info(f"Imported {len(created_tools)} tools into toolkit {toolkit_id}")
+        return created_tools        
+    except NotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e.detail))
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.exception(f"Error validating MCP server connection: {str(e)}")
-        
-        if "mcp" in str(type(e).__module__).lower():
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail=f"Failed to connect to MCP server: {str(e)}"
-            )
-        
+        logger.exception(f"Error importing tools: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to validate MCP server connection: {str(e)}"
+            detail=f"Failed to import tools: {str(e)}"
         )
-
 
 def validate_openapi_spec(config: OpenApiSpecConfiguration) -> None:
     """
@@ -1180,72 +1134,3 @@ def extract_tools_from_openapi_spec(config: OpenApiSpecConfiguration) -> list[di
     
     logger.info(f"Extracted {len(tools)} tools from OpenAPI spec")
     return tools
-
-
-async def fetch_tools_from_mcp_server(config: McpServerConfiguration) -> list[dict[str, Any]]:
-    """
-    Fetch tools from an MCP server using the official MCP client.
-    
-    Args:
-        config: MCP server configuration
-        
-    Returns:
-        List of tool definitions from the MCP server
-        
-    Raises:
-        HTTPException: If connection or protocol errors occur
-    """
-    if config.transport.value != "streamable-http":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Unsupported transport type: {config.transport.value}. Only 'streamable-http' is currently supported."
-        )
-
-    headers: dict[str, str] = {}
-    if config.credentials:
-        headers = dict(config.credentials)
-    
-    try:
-        async with streamablehttp_client(
-            url=config.server_url,
-            headers=headers if headers else None,
-            timeout=30.0,
-        ) as client_data:
-            read, write, *_ = client_data
-            
-            async with ClientSession(read, write) as session:
-                await session.initialize()
-                result = await session.list_tools()
-                
-                tools = []
-                for tool in result.tools:
-                    tool_dict: dict[str, Any] = {
-                        "name": tool.name,
-                        "description": tool.description or "",
-                        "inputSchema": tool.inputSchema,
-                    }
-                    
-                    if hasattr(tool, 'title') and tool.title:
-                        tool_dict["title"] = tool.title
-                    
-                    # Extract outputSchema if available
-                    if hasattr(tool, 'outputSchema') and tool.outputSchema:
-                        tool_dict["outputSchema"] = tool.outputSchema
-                    
-                    tools.append(tool_dict)
-                
-                return tools
-            
-    except Exception as e:
-        logger.exception(f"Error fetching tools from MCP server: {str(e)}")
-        
-        if "mcp" in str(type(e).__module__).lower():
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail=f"MCP server error: {str(e)}"
-            )
-        
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to fetch tools from MCP server: {str(e)}"
-        )

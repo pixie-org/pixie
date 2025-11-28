@@ -3,7 +3,6 @@ import json
 from typing import Any
 
 from app.db.models.tools import Tool
-from deploy.utils import generate_external_tool_id
 
 
 def build_text_response_prompt(user_message: str, tools: list[Tool]) -> str:
@@ -81,14 +80,13 @@ def build_ui_generation_prompt_base(
     # Build tool details list (only include enabled tools)
     tool_details = []
     for tool in tools:
-        tool_name = generate_external_tool_id(tool)
         # Skip disabled tools
         if not tool.is_enabled:
             continue
             
         tool_info = f"""
     - Tool ID: {tool.id}
-    - Tool Name: {tool_name}
+    - Tool Name: {tool.name}
     - Tool Description: {tool.description}"""
         if tool.title:
             tool_info += f"""

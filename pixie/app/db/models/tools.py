@@ -15,6 +15,18 @@ class McpServerTransport(str, Enum):
     STDIO = "stdio"
     SSE = "sse"
 
+class AuthenticationType(str, Enum):
+    NO_AUTH = "no_auth"
+    BEARER_TOKEN = "bearer_token"
+    OAUTH2 = "oauth2"
+
+class AuthenticationConfiguration(BaseModel):
+    type: AuthenticationType = Field(..., description="Type of the authentication")
+    bearer_token: str | None = Field(default=None, description="Bearer token of the authentication")
+    oauth2_client_id: str | None = Field(default=None, description="OAuth2 client ID for custom OAuth credentials")
+    oauth2_client_secret: str | None = Field(default=None, description="OAuth2 client secret for custom OAuth credentials")
+    oauth2_scope: list[str] | None = Field(default=None, description="OAuth2 scopes")
+
 class OpenApiSpecConfiguration(BaseModel):
     endpoint: str = Field(..., description="Endpoint of the API")
     openapi_spec: str = Field(..., description="OpenAPI specification for the tool")
@@ -22,7 +34,9 @@ class OpenApiSpecConfiguration(BaseModel):
 class McpServerConfiguration(BaseModel):
     server_url: str = Field(..., description="URL of the MCP server")
     transport: McpServerTransport = Field(..., description="Transport of the MCP server")
-    credentials: dict[str, Any] | None = Field(default=None, description="Credentials of the MCP server")
+    auth_config: AuthenticationConfiguration = Field(..., description="Authentication configuration of the MCP server")
+    custom_headers: dict[str, str] | None = Field(default=None, description="Custom headers to include in requests")
+    request_timeout: float | None = Field(default=None, description="Request timeout in seconds")
 
 class ToolkitSource(BaseModel):
     id: str = Field(..., description="Unique identifier for the toolkit source")
@@ -51,7 +65,7 @@ class Tool(BaseModel):
     updated_at: datetime | None = Field(default=None, description="The timestamp when the tool was last updated")
     name: str = Field(..., description="Unique name identifier for the tool")
     title: str | None = Field(default=None, description="Optional human-readable name of the tool for display purposes")
-    description: str = Field(..., description="Human-readable description of functionality")
+    description: str | None = Field(default=None, description="Optional human-readable description of functionality")
     inputSchema: dict[str, Any] = Field(..., description="JSON Schema defining expected parameters")
     outputSchema: dict[str, Any] | None = Field(default=None, description="Optional JSON Schema defining expected output structure")
     annotations: dict[str, Any] | None = Field(default=None, description="Optional properties describing tool behavior")

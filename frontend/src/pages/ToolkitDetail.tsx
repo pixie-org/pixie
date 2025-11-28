@@ -631,7 +631,7 @@ const ToolkitDetail = () => {
               {Boolean(
                 sourceDetails.configuration.server_url ||
                 sourceDetails.configuration.transport ||
-                sourceDetails.configuration.credentials !== undefined ||
+                sourceDetails.configuration.auth_config !== undefined ||
                 (sourceDetails.configuration as any).openapi_spec
               ) && (
                   <div className="space-y-2">
@@ -649,11 +649,15 @@ const ToolkitDetail = () => {
                           <span className="text-sm">{sourceDetails.configuration.transport}</span>
                         </div>
                       )}
-                      {sourceDetails.configuration.credentials !== undefined && (
+                      {sourceDetails.configuration.auth_config && (
                         <div className="flex flex-col gap-1">
-                          <span className="text-xs font-medium text-muted-foreground">Credentials</span>
+                          <span className="text-xs font-medium text-muted-foreground">Authentication</span>
                           <span className="text-sm text-muted-foreground">
-                            {sourceDetails.configuration.credentials ? "Configured" : "None"}
+                            {sourceDetails.configuration.auth_config.type === "no_auth" 
+                              ? "No Authentication" 
+                              : sourceDetails.configuration.auth_config.type === "bearer_token"
+                              ? "Bearer Token (configured)"
+                              : sourceDetails.configuration.auth_config.type}
                           </span>
                         </div>
                       )}

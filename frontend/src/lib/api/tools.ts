@@ -67,6 +67,14 @@ export interface ToolkitSource {
     [key: string]: unknown;
 }
 
+export interface AuthenticationConfiguration {
+    type: "no_auth" | "bearer_token" | "oauth2";
+    bearer_token?: string | null;
+    oauth2_client_id?: string | null;
+    oauth2_client_secret?: string | null;
+    oauth2_scope?: string[] | null;
+}
+
 export interface ToolkitSourceDetail {
     id: string;
     created_at: string;
@@ -77,7 +85,9 @@ export interface ToolkitSourceDetail {
     configuration: {
         server_url?: string | null;
         transport?: string | null;
-        credentials?: Record<string, unknown> | null;
+        auth_config?: AuthenticationConfiguration | null;
+        custom_headers?: Record<string, string> | null;
+        request_timeout?: number | null;
         [key: string]: unknown;
     };
     [key: string]: unknown;
@@ -90,7 +100,9 @@ export interface ToolkitSourceCreate {
     configuration: {
         transport?: string;
         server_url?: string;
-        credentials?: Record<string, unknown> | null;
+        auth_config?: AuthenticationConfiguration | null;
+        custom_headers?: Record<string, string> | null;
+        request_timeout?: number | null;
         [key: string]: unknown;
     };
 }
@@ -319,5 +331,25 @@ export async function listToolkitTools(toolkitId: string, projectId: string): Pr
         inputSchema: detail.inputSchema,
         outputSchema: detail.outputSchema,
     }));
+}
+
+export interface ToolImportRequest {
+    name: string;
+    title?: string | null;
+    description?: string | null;
+    inputSchema: Record<string, unknown>;
+    outputSchema?: Record<string, unknown> | null;
+    annotations?: Record<string, unknown> | null;
+}
+
+export async function importToolsIntoToolkit(
+    toolkitId: string,
+    projectId: string,
+    tools: ToolImportRequest[]
+): Promise<ToolDetailResponse[]> {
+    return fetchJson<ToolDetailResponse[]>(`/api/v1/projects/${projectId}/toolkits/${toolkitId}/import-tools`, {
+        method: "POST",
+        body: JSON.stringify(tools),
+    });
 }
 

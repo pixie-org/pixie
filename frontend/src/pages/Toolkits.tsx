@@ -18,8 +18,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { useNavigate, useParams } from "react-router-dom";
 import { Download } from "lucide-react";
-import { listToolkits, createToolkit, type Toolkit, type ToolkitSourceDetail } from "@/lib/api/tools";
-import { useProject } from "@/contexts/ProjectContext";
+import { listToolkits, createToolkit, importToolsIntoToolkit, type Toolkit, type ToolkitSourceDetail, type ToolImportRequest } from "@/lib/api/tools";
 import CreateMcpToolSource from "@/pages/tools/CreateMcpToolSource";
 import CreateOpenAPIToolSource from "@/pages/tools/CreateOpenAPIToolSource";
 
@@ -66,11 +65,10 @@ const Toolkits = () => {
     }
   }, [isDialogOpen]);
 
-  const handleSourceCreated = async (source: ToolkitSourceDetail) => {
+  const handleSourceCreated = async (source: ToolkitSourceDetail, tools?: any[]) => {
     setIsImporting(true);
 
     try {
-      // Step 1: Create toolkit from the source
       const toolkitData = {
         name: source.name,
         toolkit_source_id: source.id,
@@ -78,6 +76,22 @@ const Toolkits = () => {
       };
 
       const createdToolkit = await createToolkit(toolkitData, projectId);
+      if (tools && tools.length > 0) {
+        try {
+          const toolsToImport: ToolImportRequest[] = tools.map((tool) => ({
+            name: tool.name,
+            title: tool.title || null,
+            description: tool.description || null,
+            inputSchema: tool.inputSchema || {},
+            outputSchema: tool.outputSchema || null,
+            annotations: tool.annotations || null,
+          }));
+
+          await importToolsIntoToolkit(createdToolkit.id, projectId, toolsToImport);
+        } catch (importError: any) {
+          console.error("Failed to import tools:", importError);
+        }
+      }
 
       await fetchToolkits();
       setIsDialogOpen(false);

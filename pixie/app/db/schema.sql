@@ -33,6 +33,20 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
+-- Create function to handle ui_widget_resource deletion
+-- Sets ui_resource_id to NULL in widget_message while preserving project_id
+CREATE OR REPLACE FUNCTION handle_ui_widget_resource_delete()
+RETURNS TRIGGER AS $$
+BEGIN
+    UPDATE widget_message
+    SET ui_resource_id = NULL
+    WHERE ui_resource_id = OLD.id
+      AND project_id = OLD.project_id;
+    
+    RETURN OLD;
+END;
+$$ language 'plpgsql';
+
 -- ============================================================================
 -- User Authentication tables
 -- ============================================================================
@@ -255,6 +269,14 @@ CREATE TRIGGER update_ui_widget_resource_updated_at
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
 
+-- Create trigger to handle ui_widget_resource deletion
+-- This sets ui_resource_id to NULL in widget_message while preserving project_id
+DROP TRIGGER IF EXISTS handle_ui_widget_resource_delete_trigger ON ui_widget_resource;
+CREATE TRIGGER handle_ui_widget_resource_delete_trigger
+    BEFORE DELETE ON ui_widget_resource
+    FOR EACH ROW
+    EXECUTE FUNCTION handle_ui_widget_resource_delete();
+
 -- Add foreign key constraint from widget to ui_widget_resource
 -- (deferred because of circular dependency)
 ALTER TABLE widget
@@ -324,7 +346,7 @@ CREATE TABLE IF NOT EXISTS widget_message (
     ui_resource_id TEXT,
     PRIMARY KEY (id, project_id),
     FOREIGN KEY (conversation_id, project_id) REFERENCES widget_chat(id, project_id) ON DELETE CASCADE,
-    FOREIGN KEY (ui_resource_id, project_id) REFERENCES ui_widget_resource(id, project_id) ON DELETE SET NULL
+    FOREIGN KEY (ui_resource_id, project_id) REFERENCES ui_widget_resource(id, project_id) ON DELETE NO ACTION
 );
 
 -- Create indexes for widget_message

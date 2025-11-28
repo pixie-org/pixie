@@ -6,8 +6,6 @@ from app.api.public import (
     chat,
     designs,
     health,
-    mcp_chat,
-    mcp_tool_call,
     projects,
     tools,
     widgets,
@@ -24,7 +22,5 @@ api_router.include_router(projects.router)
 api_router.include_router(tools.router)
 api_router.include_router(widgets.router)
 api_router.include_router(chat.router)
-api_router.include_router(mcp_chat.router)
-api_router.include_router(mcp_tool_call.router)
 api_router.include_router(designs.router)
 
