@@ -11,6 +11,7 @@ from app.api.core.prompts import (
     build_text_response_prompt,
     build_ui_generation_prompt_base,
     build_ui_generation_user_message,
+    build_output_schema_inference_prompt,
 )
 from app.api.models.tools import ToolResponse
 from app.db.models.chat import Message
@@ -328,6 +329,87 @@ class LlmChat:
             )
         
         return cleaned_text
+
+    def infer_output_schema(
+        self,
+        tool_name: str,
+        tool_description: str,
+        tool_output: Any,
+    ) -> dict[str, Any]:
+        """
+        Infer JSON Schema from tool output using LLM.
+        
+        Args:
+            tool_name: Name of the tool
+            tool_description: Description of the tool
+            tool_output: The actual output from the tool call
+            
+        Returns:
+            Inferred JSON Schema dictionary
+        """
+        import json
+        
+        system_prompt = build_output_schema_inference_prompt(
+            tool_name=tool_name,
+            tool_description=tool_description,
+            tool_output=tool_output,
+        )
+
+        provider = self.settings.llm_provider.lower() if self.settings.llm_provider else "openai"
+        
+        if provider == "openai":
+            if not self.openai_client:
+                raise ValueError("OpenAI client not initialized")
+            
+            try:
+                response = self.openai_client.chat.completions.create(
+                    model=self.settings.openai_model,
+                    messages=[
+                        {"role": "system", "content": "You are a JSON Schema expert. Return only valid JSON."},
+                        {"role": "user", "content": system_prompt}
+                    ],
+                    temperature=0.1,
+                    max_tokens=2000,
+                    response_format={"type": "json_object"} if hasattr(self.openai_client.chat.completions.create, "__annotations__") else None,
+                )
+                schema_text = response.choices[0].message.content or "{}"
+            except Exception as e:
+                logger.error(f"OpenAI API error during schema inference: {e}", exc_info=True)
+                raise
+        else:  # claude
+            if not self.anthropic_client:
+                raise ValueError("Anthropic client not initialized")
+            
+            try:
+                response = self.anthropic_client.messages.create(
+                    model=self.settings.claude_model,
+                    max_tokens=2000,
+                    system="You are a JSON Schema expert. Return only valid JSON.",
+                    messages=[
+                        {"role": "user", "content": system_prompt}
+                    ],
+                )
+                schema_text = response.content[0].text if response.content else "{}"
+            except Exception as e:
+                logger.error(f"Anthropic API error during schema inference: {e}", exc_info=True)
+                raise
+        
+        try:
+            if "```json" in schema_text:
+                schema_text = schema_text.split("```json")[1].split("```")[0].strip()
+            elif "```" in schema_text:
+                schema_text = schema_text.split("```")[1].split("```")[0].strip()
+            
+            schema = json.loads(schema_text)
+            logger.info(f"Successfully inferred schema for tool '{tool_name}'")
+            return schema
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse inferred schema as JSON: {e}")
+            logger.error(f"Schema text: {schema_text[:500]}")
+            return {
+                "type": "object",
+                "description": "Schema inference failed. Please review the tool output manually.",
+            }
 
     def _generate_ui_resource(
         self,

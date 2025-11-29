@@ -745,17 +745,17 @@ export function useConnection({
           error,
         );
 
-        // Check if it's a proxy auth error
-        if (isProxyAuthError(error)) {
-          toast({
-            title: "Proxy Authentication Required",
-            description:
-              "Please enter the session token from the proxy server console in the Configuration settings.",
-            variant: "destructive",
-          });
-          setConnectionStatus("error");
-          return;
-        }
+          // Check if it's a proxy auth error
+          if (isProxyAuthError(error)) {
+            toast({
+              title: "Proxy Authentication Required",
+              description:
+                "Please enter the session token from the proxy server console in the Configuration settings.",
+              variant: "destructive",
+            });
+            setConnectionStatus("error");
+            return;
+          }
 
         const authResult = await handleAuthError(error);
         if (authResult.handled) {
@@ -765,8 +765,8 @@ export function useConnection({
             // The caller should wait for token to appear in localStorage
             return;
           }
-          // OAuth was already authorized, retry connection
-          return connect(undefined, retryCount + 1);
+            // OAuth was already authorized, retry connection
+            return connect(undefined, retryCount + 1);
         }
         if (is401Error(error)) {
           // Don't set error state if we're about to redirect for auth
@@ -835,10 +835,19 @@ export function useConnection({
 
   const disconnect = async (clearAuthProvider: boolean = true) => {
     if (transportType === "streamable-http")
-      await (
-        clientTransport as StreamableHTTPClientTransport
-      ).terminateSession();
-    await mcpClient?.close();
+      try {
+        await (
+          clientTransport as StreamableHTTPClientTransport
+        ).terminateSession();
+      } catch (error: any) {
+        const errorMessage = error?.message || String(error);
+        console.warn('[useConnection] Failed to terminate session:', error);
+      }
+    try {
+      await mcpClient?.close();
+    } catch (error) {
+      console.warn('[useConnection] Error closing MCP client:', error);
+    } 
     if (clearAuthProvider) {
       const authProvider = new InspectorOAuthClientProvider(sseUrl);
       authProvider.clear();

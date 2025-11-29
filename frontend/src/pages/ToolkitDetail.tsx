@@ -29,10 +29,12 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { ArrowLeft, Trash2 } from "lucide-react";
+import { ArrowLeft, Trash2, Sparkles } from "lucide-react";
 import { getToolkit, listToolkitTools, getToolDetail, deleteToolDetail, enableTool, disableTool, deleteToolkit, getToolkitSource, type ToolkitDetail, ToolDetailResponse, type ToolkitSourceDetail } from "@/lib/api";
 import { useProject } from "@/contexts/ProjectContext";
-import type { Tool } from "@/components/ToolsList";
+import type { Tool } from "@/lib/tools";
+import { getToolWarningTooltip } from "@/lib/tools";
+import { InferOutputSchemaDialog } from "@/components/InferOutputSchemaDialog";
 
 const ToolkitDetail = () => {
   const { toolkitId, projectId: urlProjectId } = useParams<{ toolkitId: string; projectId: string }>();
@@ -61,6 +63,10 @@ const ToolkitDetail = () => {
   const [sourceDetails, setSourceDetails] = useState<ToolkitSourceDetail | null>(null);
   const [isLoadingSourceDetails, setIsLoadingSourceDetails] = useState(false);
   const [sourceDetailsError, setSourceDetailsError] = useState<string | null>(null);
+  
+  // Schema inference dialog state
+  const [isInferSchemaDialogOpen, setIsInferSchemaDialogOpen] = useState(false);
+  
   const projectId = urlProjectId as string;
 
   useEffect(() => {
@@ -209,6 +215,21 @@ const ToolkitDetail = () => {
       return JSON.stringify(obj, null, 2);
     } catch {
       return String(obj);
+    }
+  };
+
+  const handleSchemaUpdated = async () => {
+    if (selectedToolId) {
+      const updatedDetails = await getToolDetail(selectedToolId, projectId);
+      setToolDetails(updatedDetails);
+      if (toolkitId) {
+        try {
+          const toolsData = await listToolkitTools(toolkitId, projectId);
+          setTools(toolsData);
+        } catch (err: any) {
+          console.error("Failed to refresh tools list after schema update:", err);
+        }
+      }
     }
   };
 
@@ -382,9 +403,12 @@ const ToolkitDetail = () => {
                   <CardHeader className="pb-3">
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex-1 min-w-0">
-                        <CardTitle className="text-lg font-semibold mb-1.5 group-hover:text-primary transition-colors truncate">
-                          {tool.name}
-                        </CardTitle>
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <CardTitle className="text-lg font-semibold group-hover:text-primary transition-colors truncate">
+                            {tool.name}
+                          </CardTitle>
+                          {getToolWarningTooltip(tool, "general")}
+                        </div>
                       </div>
                     </div>
                   </CardHeader>
@@ -431,7 +455,20 @@ const ToolkitDetail = () => {
             <div className="space-y-6 py-4">
               {/* Name and ID Section */}
               <div className="space-y-2">
-                <h3 className="text-xl font-semibold">{toolDetails.title || toolDetails.name}</h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-xl font-semibold">{toolDetails.title || toolDetails.name}</h3>
+                  {getToolWarningTooltip(
+                    {
+                      id: toolDetails.id,
+                      name: toolDetails.name,
+                      description: toolDetails.description,
+                      endpointType: "mcp" as const,
+                      endpointConfig: {} as any,
+                      outputSchema: toolDetails.outputSchema,
+                    },
+                    "general"
+                  )}
+                </div>
                 <div className="inline-flex items-center gap-2">
                   <span className="text-xs text-muted-foreground font-mono bg-muted px-2 py-1 rounded">
                     {toolDetails.id}
@@ -504,6 +541,22 @@ const ToolkitDetail = () => {
                     </AccordionItem>
                   )}
                 </Accordion>
+              )}
+
+              {/* Infer Output Schema Button - Only show if output schema is missing */}
+              {(!toolDetails.outputSchema || (typeof toolDetails.outputSchema === 'object' && Object.keys(toolDetails.outputSchema).length === 0)) && 
+               toolDetails.inputSchema && 
+               toolkit?.toolkit_source?.source_type === "mcp_server" && (
+                <div className="flex justify-center">
+                  <Button
+                    onClick={() => setIsInferSchemaDialogOpen(true)}
+                    variant="outline"
+                    className="w-full"
+                  >
+                    <Sparkles className="mr-2 h-4 w-4" />
+                    Infer Output Schema
+                  </Button>
+                </div>
               )}
 
               {/* Metadata */}
@@ -725,6 +778,19 @@ const ToolkitDetail = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Infer Output Schema Dialog - Only render when dialog is open */}
+      {isInferSchemaDialogOpen && toolkit?.toolkit_source && toolDetails && selectedToolId && (
+        <InferOutputSchemaDialog
+          open={isInferSchemaDialogOpen}
+          onOpenChange={setIsInferSchemaDialogOpen}
+          toolId={selectedToolId}
+          toolDetails={toolDetails}
+          toolkitSource={toolkit.toolkit_source}
+          projectId={projectId}
+          onSchemaUpdated={handleSchemaUpdated}
+        />
+      )}
     </div>
   );
 };

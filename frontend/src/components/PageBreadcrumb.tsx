@@ -211,6 +211,16 @@ export function PageBreadcrumb() {
       return items;
     }
 
+    // Handle OAuth callback route
+    if (pathname === "/oauth/callback") {
+      items.push({
+        label: "Mcp Server Oauth Callback",
+        path: pathname,
+        isActive: true,
+      });
+      return items;
+    }
+
     // Handle other known routes
     const routeLabel = routeLabels[pathname];
     if (routeLabel) {

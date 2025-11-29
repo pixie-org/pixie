@@ -24,7 +24,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
-import { Tool, MCPEndpointConfig, APIEndpointConfig } from "./ToolsList";
+import type { Tool, MCPEndpointConfig, APIEndpointConfig } from "@/lib/tools";
 import { Badge } from "@/components/ui/badge";
 
 interface EditToolDialogProps {
@@ -240,7 +240,7 @@ const EditToolDialog = ({ tool, open, onOpenChange, onSave, onDelete, projectId 
             <Label htmlFor="tool-id">Tool ID</Label>
             <Input
               id="tool-id"
-              value={tool.toolId}
+              value={tool.id}
               disabled
               className="bg-muted"
             />

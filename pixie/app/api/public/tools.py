@@ -10,6 +10,8 @@ from mcp import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
 
 from app.api.models.tools import (
+    InferOutputSchemaRequest,
+    InferOutputSchemaResponse,
     ToolCreateRequest,
     ToolImportRequest,
     ToolkitCreate,
@@ -31,6 +33,8 @@ from app.db.models.tools import (
     Toolkit,
     ToolkitSource,
 )
+from app.api.core.llm_chat import LlmChat
+from app.api.utils.llm_check import require_llm_keys
 from app.db.storage.mcp_tool_repository import McpToolRepository
 from app.db.storage.toolkit_repository import ToolkitRepository
 from app.db.storage.toolkit_source_repository import ToolkitSourceRepository
@@ -526,9 +530,19 @@ def list_tools_in_toolkit(
         
         tools = tool_repo.list_by_toolkit(toolkit_id, project_id)
         
-        return [
-            ToolListResponse.model_validate(t.model_dump()) for t in tools
-        ]
+        result = []
+        for t in tools:
+            tool_dict = t.model_dump()
+            # Compute hasOutputSchema: check if outputSchema exists and is not empty
+            output_schema = tool_dict.get("outputSchema")
+            has_output_schema = (
+                output_schema is not None 
+                and (isinstance(output_schema, dict) and len(output_schema) > 0)
+            )
+            tool_dict["hasOutputSchema"] = has_output_schema
+            result.append(ToolListResponse.model_validate(tool_dict))
+        
+        return result
     except NotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e.detail))
     except Exception as e:
@@ -800,6 +814,54 @@ def disable_tool(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to disable tool: {str(e)}"
+        )
+
+
+@router.post(
+    "/tools/{tool_id}/infer-output-schema",
+    response_model=InferOutputSchemaResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Infer output schema from tool execution output",
+)
+def infer_tool_output_schema(
+    tool_id: str,
+    request: InferOutputSchemaRequest,
+    project_id: str = Depends(verify_project_id_path),
+) -> InferOutputSchemaResponse:
+    """
+    Infer output schema from tool output using LLM.
+    """
+    # Check if LLM keys are configured
+    require_llm_keys()
+    
+    try:
+        tool_repo = McpToolRepository()
+        
+        # Get tool for name and description
+        tool = tool_repo.get_by_id(tool_id, project_id)
+        
+        # Use LLM to infer schema from the provided tool output
+        llm_chat = LlmChat()
+        inferred_schema = llm_chat.infer_output_schema(
+            tool_name=tool.name,
+            tool_description=tool.description or "",
+            tool_output=request.tool_output,
+        )
+        
+        return InferOutputSchemaResponse(
+            inferred_schema=inferred_schema,
+            tool_output=request.tool_output,
+        )
+        
+    except NotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e.detail))
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"Error inferring output schema: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to infer output schema: {str(e)}"
         )
 
 

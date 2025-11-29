@@ -136,6 +136,7 @@ class ToolListResponse(BaseModel):
     title: str | None = Field(default=None, description="Optional human-readable name of the tool")
     description: str = Field(..., description="Human-readable description of functionality")
     is_enabled: bool = Field(..., description="Whether the tool is enabled")
+    hasOutputSchema: bool = Field(..., description="Whether the tool has an output schema defined")
 
 
 class ToolImportRequest(BaseModel):
@@ -146,3 +147,14 @@ class ToolImportRequest(BaseModel):
     inputSchema: dict[str, Any] = Field(..., description="JSON Schema defining expected parameters")
     outputSchema: dict[str, Any] | None = Field(default=None, description="Optional JSON Schema defining expected output structure")
     annotations: dict[str, Any] | None = Field(default=None, description="Optional properties describing tool behavior")
+
+
+class InferOutputSchemaRequest(BaseModel):
+    """Schema for inferring output schema from tool execution."""
+    tool_output: Any = Field(..., description="The actual output from the tool call")
+
+
+class InferOutputSchemaResponse(BaseModel):
+    """Schema for inferred output schema response."""
+    inferred_schema: dict[str, Any] = Field(..., description="Inferred JSON Schema for the tool output")
+    tool_output: Any = Field(..., description="The actual tool output that was used for inference")

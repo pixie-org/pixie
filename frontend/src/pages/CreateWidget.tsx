@@ -18,7 +18,8 @@ import { useNavigate, useParams } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { createWidget, listWidgets } from "@/lib/api/widgets";
 import { listToolkits, listToolkitTools, type Toolkit } from "@/lib/api/tools";
-import type { Tool } from "@/components/ToolsList";
+import type { Tool } from "@/lib/tools";
+import { getToolWarningTooltip } from "@/lib/tools";
 
 const CreateWidget = () => {
   const navigate = useNavigate();
@@ -277,6 +278,7 @@ const CreateWidget = () => {
                         className="flex items-center gap-1 pr-1"
                       >
                         <span className="text-xs">{tool.name}</span>
+                        {getToolWarningTooltip(tool, "widget-creation")}
                         <Button
                           variant="ghost"
                           size="icon"
@@ -353,7 +355,10 @@ const CreateWidget = () => {
                               htmlFor={`tool-${tool.id}`}
                               className="flex-1 cursor-pointer text-sm font-normal"
                             >
-                              <div className="font-medium">{tool.name}</div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium">{tool.name}</span>
+                                {getToolWarningTooltip(tool, "widget-creation")}
+                              </div>
                               {tool.description && (
                                 <div className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
                                   {tool.description}

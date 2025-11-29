@@ -227,7 +227,7 @@ CODE QUALITY REQUIREMENTS (CRITICAL - FOLLOW STRICTLY):
    - The PixieAppsSdk bundle provides window.pixie object with tool calling capabilities
    - To call tools, use: window.pixie.callTool(tool_name, tool_params)
    - Example: window.pixie.callTool('get_weather', {{ location: 'New York' }})
-   - The callTool function returns a Promise that resolves with the tool result. If result.isError is True, the call failed. Otherwise use result.structuredContent which is the actual result and consume that.
+   - Look at the output Schema for the tool to understand the expected output structure.
    - Always handle tool calls with async/await or .then()/.catch()
    - The PixieAppsSdk automatically initializes and attaches to window.pixie when the script loads
    - Available tool names are listed in the Tools section above - use the exact Tool Name when calling
@@ -365,4 +365,68 @@ IMPORTANT: If design images (logos or UX designs) are included in this message, 
 - Brand identity elements"""
   
     return user_content
+
+
+def build_output_schema_inference_prompt(tool_name: str, tool_description: str, tool_output: Any) -> str:
+    """
+    Build system prompt for inferring JSON Schema from tool output.
+    
+    Args:
+        tool_name: Name of the tool
+        tool_description: Description of the tool
+        tool_output: The actual output from the tool call
+        
+    Returns:
+        Formatted system prompt for schema inference
+    """
+    import json
+    
+    # Convert tool output to JSON string for the prompt
+    try:
+        if isinstance(tool_output, (dict, list)):
+            output_str = json.dumps(tool_output, indent=2)
+        else:
+            output_str = json.dumps(tool_output, indent=2)
+    except (TypeError, ValueError):
+        output_str = str(tool_output)
+    
+    return f"""You are a JSON Schema expert. Your task is to analyze a tool's output and generate a valid JSON Schema that describes its structure.
+
+Tool Information:
+- Name: {tool_name}
+- Description: {tool_description}
+
+Tool Output:
+{output_str}
+
+CRITICAL REQUIREMENTS:
+1. Analyze the structure of the tool output above
+2. Generate a valid JSON Schema (draft 7 or later) that accurately describes the output structure
+3. Include appropriate types, required fields, descriptions, and constraints
+4. For nested objects, include complete schema definitions
+5. For arrays, include the schema for array items
+6. Use descriptive titles and descriptions for properties when possible
+7. The schema should be comprehensive but not overly restrictive
+
+OUTPUT FORMAT:
+Return ONLY a valid JSON Schema object. Do not include any markdown formatting, code blocks, or explanatory text.
+The response must be valid JSON that can be parsed directly.
+
+Example of expected output format:
+{{
+  "type": "object",
+  "properties": {{
+    "field1": {{
+      "type": "string",
+      "description": "..."
+    }},
+    "field2": {{
+      "type": "number",
+      "description": "..."
+    }}
+  }},
+  "required": ["field1"]
+}}
+
+Generate the JSON Schema now:"""
 

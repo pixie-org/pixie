@@ -33,7 +33,8 @@ import {
 import { listWidgets, getWidget, updateWidget, deleteWidget, type WidgetListResponse, type WidgetResponse } from "@/lib/api/widgets";
 import { listToolkits, listToolkitTools, type Toolkit } from "@/lib/api/tools";
 import { useProject } from "@/contexts/ProjectContext";
-import type { Tool } from "@/components/ToolsList";
+import type { Tool } from "@/lib/tools";
+import { getToolWarningTooltip } from "@/lib/tools";
 import {
   Select,
   SelectContent,
@@ -572,6 +573,7 @@ const Widgets = () => {
                         className="flex items-center gap-1 pr-1"
                       >
                         <span className="text-xs">{tool.name}</span>
+                        {getToolWarningTooltip(tool, "widget-creation")}
                         <Button
                           variant="ghost"
                           size="icon"
@@ -645,7 +647,10 @@ const Widgets = () => {
                               htmlFor={`edit-tool-${tool.id}`}
                               className="flex-1 cursor-pointer text-sm font-normal"
                             >
-                              <div className="font-medium">{tool.name}</div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium">{tool.name}</span>
+                                {getToolWarningTooltip(tool, "widget-creation")}
+                              </div>
                               {tool.description && (
                                 <div className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
                                   {tool.description}

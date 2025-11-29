@@ -1,5 +1,5 @@
 import { fetchJson, APIEndpointConfiguration, MCPClientConfiguration } from "./client";
-import type { Tool, EndpointType, MCPEndpointConfig, APIEndpointConfig } from "@/components/ToolsList";
+import type { Tool, EndpointType, MCPEndpointConfig, APIEndpointConfig } from "@/lib/tools";
 
 export interface ToolCreate {
     project_id?: string | null;
@@ -15,10 +15,12 @@ export interface ToolCreate {
 }
 
 export interface ToolUpdate {
-    tool_name?: string | null;
-    tool_description?: string | null;
-    status?: string | null;
-    use_temporary_ui_resource?: boolean;
+    name?: string | null;
+    title?: string | null;
+    description?: string | null;
+    inputSchema?: Record<string, unknown> | null;
+    outputSchema?: Record<string, unknown> | null;
+    annotations?: Record<string, unknown> | null;
 }
 
 export interface ToolListResponse {
@@ -43,6 +45,16 @@ export interface ToolResponse {
     tool_input_schema?: Record<string, unknown> | null;
     tool_output_schema?: Record<string, unknown> | null;
     tool_id: string;
+}
+
+export interface ToolListResponse {
+    id: string;
+    toolkit_id: string;
+    name: string;
+    title: string | null;
+    description: string;
+    is_enabled: boolean;
+    hasOutputSchema: boolean;
 }
 
 export interface ToolDetailResponse {
@@ -130,24 +142,6 @@ export interface ToolkitDetail {
     [key: string]: unknown;
 }
 
-
-// Re-export Tool types from ToolsList for consistency
-export type { Tool, EndpointType, MCPEndpointConfig, APIEndpointConfig };
-
-// Converter functions
-export function convertToolListToTool(toolListResponse: ToolListResponse): Tool {
-    return {
-        id: toolListResponse.tool_id,
-        toolId: toolListResponse.tool_id,
-        name: toolListResponse.tool_name,
-        description: toolListResponse.tool_description,
-        endpointType: toolListResponse.tool_type as EndpointType,
-        endpointConfig: {} as MCPEndpointConfig | APIEndpointConfig, // Will be populated when full details are fetched
-        status: toolListResponse.status as "active" | "disabled",
-        type: toolListResponse.tool_type as EndpointType,
-    };
-}
-
 export function convertToolResponseToTool(toolResponse: ToolResponse): Tool {
     // Properly type the endpoint config based on tool type
     let endpointConfig: MCPEndpointConfig | APIEndpointConfig;
@@ -176,13 +170,11 @@ export function convertToolResponseToTool(toolResponse: ToolResponse): Tool {
 
     return {
         id: toolResponse.tool_id,
-        toolId: toolResponse.tool_id,
         name: toolResponse.tool_name,
         description: toolResponse.tool_description,
         endpointType: toolResponse.tool_type as EndpointType,
         endpointConfig,
         status: toolResponse.status as "active" | "disabled",
-        type: toolResponse.tool_type as EndpointType,
         inputSchema: toolResponse.tool_input_schema,
         outputSchema: toolResponse.tool_output_schema,
     };
@@ -233,8 +225,8 @@ export async function updateTool(
     toolId: string,
     toolData: ToolUpdate,
     projectId: string
-): Promise<ToolResponse> {
-    return fetchJson<ToolResponse>(`/api/v1/projects/${projectId}/tools/${toolId}`, {
+): Promise<ToolDetailResponse> {
+    return fetchJson<ToolDetailResponse>(`/api/v1/projects/${projectId}/tools/${toolId}`, {
         method: "PATCH",
         body: JSON.stringify(toolData),
     });
@@ -280,6 +272,29 @@ export async function disableTool(toolId: string, projectId: string): Promise<vo
     });
 }
 
+export interface InferOutputSchemaRequest {
+    tool_output: unknown;
+}
+
+export interface InferOutputSchemaResponse {
+    inferred_schema: Record<string, unknown>;
+    tool_output: unknown;
+}
+
+export async function inferToolOutputSchema(
+    toolId: string,
+    request: InferOutputSchemaRequest,
+    projectId: string
+): Promise<InferOutputSchemaResponse> {
+    return fetchJson<InferOutputSchemaResponse>(
+        `/api/v1/projects/${projectId}/tools/${toolId}/infer-output-schema`,
+        {
+            method: "POST",
+            body: JSON.stringify(request),
+        }
+    );
+}
+
 // --- Toolkit Sources ---
 
 export async function getToolkitSource(sourceId: string, projectId: string): Promise<ToolkitSourceDetail> {
@@ -317,19 +332,18 @@ export async function deleteToolkit(toolkitId: string, projectId: string): Promi
 }
 
 export async function listToolkitTools(toolkitId: string, projectId: string): Promise<Tool[]> {
-    const response = await fetchJson<ToolDetailResponse[]>(`/api/v1/projects/${projectId}/toolkits/${toolkitId}/tools`);
-    // Convert ToolDetailResponse to Tool
-    return response.map(detail => ({
-        id: detail.id,
-        toolId: detail.id,
-        name: detail.name,
-        description: detail.description,
+    const response = await fetchJson<ToolListResponse[]>(`/api/v1/projects/${projectId}/toolkits/${toolkitId}/tools`);
+    // Convert ToolListResponse to Tool
+    return response.map(tool => ({
+        id: tool.id,
+        name: tool.name,
+        description: tool.description,
         endpointType: "mcp" as EndpointType,
         endpointConfig: {} as MCPEndpointConfig | APIEndpointConfig, // Toolkit tools don't have full config in list view
-        status: detail.is_enabled ? "active" as const : "disabled" as const,
-        type: "mcp" as const,
-        inputSchema: detail.inputSchema,
-        outputSchema: detail.outputSchema,
+        status: tool.is_enabled ? "active" as const : "disabled" as const,
+        inputSchema: undefined, // Not available in list response
+        outputSchema: undefined, // Not available in list response, but we have hasOutputSchema
+        hasOutputSchema: tool.hasOutputSchema, // Add this field to Tool interface
     }));
 }
 
