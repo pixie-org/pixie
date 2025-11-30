@@ -6,7 +6,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
-import { ThemeToggle } from "@/components/ThemeToggle";
+import { HeaderActions } from "@/components/HeaderActions";
 import { PageBreadcrumb } from "@/components/PageBreadcrumb";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { ProjectProvider } from "@/contexts/ProjectContext";
@@ -50,7 +50,7 @@ function AppContent() {
               <div className="flex-1">
                 <PageBreadcrumb />
               </div>
-              <ThemeToggle />
+              <HeaderActions />
             </header>
             <div className="flex-1 p-4 lg:p-6">
               <Routes>
@@ -117,7 +117,7 @@ function AppContent() {
             <div className="flex-1">
               <PageBreadcrumb />
             </div>
-            <ThemeToggle />
+            <HeaderActions />
           </header>
           <div className="flex-1 p-4 lg:p-6">
             <Routes>

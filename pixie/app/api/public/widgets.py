@@ -100,6 +100,7 @@ def create_widget(
         llm_chat = LlmChat()
         response_text, ui_resource_dict = llm_chat.generate_response(
             widget_id=created.id,
+            project_id=project_id,
             tools=tools,
             user_message=widget_data.create_prompt,
             previous_messages=previous_messages,

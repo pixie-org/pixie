@@ -134,6 +134,7 @@ async def handle_widget_chat_message(
             llm_chat = LlmChat()
             response_text, ui_resource_dict = llm_chat.generate_response(
                 widget_id=conversation.widget_id,
+                project_id=project_id,
                 tools=tools,
                 user_message=message_request.content,
                 previous_messages=previous_messages,

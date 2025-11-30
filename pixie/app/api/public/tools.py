@@ -33,7 +33,7 @@ from app.db.models.tools import (
     Toolkit,
     ToolkitSource,
 )
-from app.api.core.llm_chat import LlmChat
+from app.api.core.tool_schema import infer_output_schema
 from app.api.utils.llm_check import require_llm_keys
 from app.db.storage.mcp_tool_repository import McpToolRepository
 from app.db.storage.toolkit_repository import ToolkitRepository
@@ -850,8 +850,7 @@ def infer_tool_output_schema(
         tool = tool_repo.get_by_id(tool_id, project_id)
         
         # Use LLM to infer schema from the provided tool output
-        llm_chat = LlmChat()
-        inferred_schema = llm_chat.infer_output_schema(
+        inferred_schema = infer_output_schema(
             tool_name=tool.name,
             tool_description=tool.description or "",
             tool_output=request.tool_output,

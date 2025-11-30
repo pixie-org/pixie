@@ -1,17 +1,14 @@
 """LLM chat service for generating responses and UI resources."""
 import base64
 import logging
-import os
 import re
 from typing import Any
 
-import litellm
-
+from app.api.core.llm_client import LLMClient
 from app.api.core.prompts import (
-    build_text_response_prompt,
-    build_ui_generation_prompt_base,
+    build_ui_improvements_response_prompt,
+    build_ui_generation_system_prompt,
     build_ui_generation_user_message,
-    build_output_schema_inference_prompt,
 )
 from app.api.models.tools import ToolResponse
 from app.db.models.chat import Message
@@ -21,6 +18,16 @@ from app.server.config import get_settings
 
 logger = logging.getLogger(__name__)
 
+def extract_html_from_ui_resource(ui_resource: dict[str, Any] | None) -> str | None:
+    """Extract HTML text from UI resource structure."""
+    if not ui_resource or not isinstance(ui_resource, dict):
+        return None
+    
+    resource = ui_resource.get("resource", {})
+    if isinstance(resource, dict):
+        html = resource.get("text")
+        if html:
+            return html
 
 class LlmChat:
     """
@@ -36,84 +43,14 @@ class LlmChat:
     def __init__(self):
         """Initialize the LLM chat service with configured provider."""
         settings = get_settings()
-        self.settings = settings
-        self.model_name = self._get_litellm_model_name(settings)
-
-    def _get_litellm_model_name(self, settings):
-        """Configure litellm with API keys from settings."""
-        if settings.llm_provider == "openai":
-            os.environ["OPENAI_API_KEY"] = settings.openai_api_key
-            if not settings.openai_model:
-                raise ValueError("OpenAI model is not configured. Please set OPENAI_MODEL in your environment variables.")
-            return settings.openai_model
-        elif settings.llm_provider == "claude":
-            os.environ["ANTHROPIC_API_KEY"] = settings.anthropic_api_key
-            if not settings.claude_model:
-                raise ValueError("Claude model is not configured. Please set CLAUDE_MODEL in your environment variables.")
-            return f"anthropic/{settings.claude_model}"
-        elif settings.llm_provider == "gemini":
-            os.environ["GEMINI_API_KEY"] = settings.gemini_api_key
-            if not settings.gemini_model:
-                raise ValueError("Gemini model is not configured. Please set GEMINI_MODEL in your environment variables.")
-            return f"gemini/{settings.gemini_model}"
-        else:
-            raise ValueError(f"Unknown provider: {settings.llm_provider}")
-
-    def _call_llm(
-        self,
-        model: str,
-        messages: list[dict[str, Any]],
-        system: str | None = None,
-        temperature: float = 0.2,
-        max_tokens: int = 1000
-    ) -> tuple[str, dict[str, Any]]:
-        """
-        Unified LLM call interface using litellm.
-        
-        Args:
-            model: litellm model name (e.g., "gpt-4o", "claude/claude-3-5-sonnet-20240620")
-            messages: List of message dicts with "role" and "content" keys
-            system: Optional system message
-            temperature: Temperature for generation
-            max_tokens: Maximum tokens to generate
-    
-        Returns:
-            Tuple of (response_text, usage_info)
-        """
-        try:
-            litellm_messages = messages.copy()
-            if system:
-                if litellm_messages and litellm_messages[0].get("role") == "system":
-                    litellm_messages[0] = {"role": "system", "content": system}
-                else:
-                    litellm_messages.insert(0, {"role": "system", "content": system})
-            response = litellm.completion(
-                model=model,
-                messages=litellm_messages,
-                temperature=temperature,
-                max_tokens=max_tokens
-            )
-            response_text = response.choices[0].message.content or ""
-
-            usage_info = {
-                "input_tokens": getattr(response.usage, "prompt_tokens", 0) if hasattr(response, "usage") else 0,
-                "output_tokens": getattr(response.usage, "completion_tokens", 0) if hasattr(response, "usage") else 0,
-                "finish_reason": response.choices[0].finish_reason if response.choices else None,
-            }
-
-            logger.info(
-                f"LLM response generated successfully - "
-                f"Model: {model}, Tokens: {usage_info['input_tokens']} input + {usage_info['output_tokens']} output, "
-                f"Response length: {len(response_text)} chars"
-            )
-            return response_text, usage_info
-        except Exception as e:
-            logger.error(f"litellm API error for model {model}: {e}", exc_info=True)
-            raise
+        self.max_ui_tokens = settings.llm_ui_max_tokens
+        self.llm_client = LLMClient()
+        self.ui_generation_temperature = 0.3
 
     def generate_response(
         self,
         widget_id: str,
+        project_id: str,
         tools: list[ToolResponse],
         user_message: str,
         previous_messages: list[Message],
@@ -132,25 +69,28 @@ class LlmChat:
             - response_text: The generated text response
             - ui_resource_dict: The generated UI resource dictionary
         """
-        # Build conversation context from previous messages
-        conversation_context = self._build_conversation_context(previous_messages)
-        
         html_content = self._generate_ui_resource(
             widget_id=widget_id,
+            project_id=project_id,
             tools=tools,
             user_message=user_message,
-            conversation_context=conversation_context,
+            previous_messages=previous_messages,
         )
 
         if html_content and isinstance(html_content, dict) and html_content.get("html_content"):
             user_message = f"Required UI description or improvements to the HTML content: {user_message}\n\n" + \
                 f"Following is the HTML content generated for the user's request: {html_content['html_content']}"
 
-        response_text = self._generate_response(
-            tools=tools,
-            user_message=user_message,
-            conversation_context=conversation_context,
-        )
+        try:
+            response_text = self._generate_text_response(
+                tools=tools,
+                user_message=user_message,
+                previous_messages=previous_messages,
+                existing_html=html_content.get("html_content")
+            )
+        except Exception as e:
+            logger.error(f"LLM response generation failed: {e}", exc_info=True)
+            response_text = "I'm sorry, I'm having trouble generating a response. Please try again later."
 
         if html_content and isinstance(html_content, dict) and html_content.get("html_content"):
             ui_resource = {
@@ -166,92 +106,12 @@ class LlmChat:
 
         return response_text, ui_resource
 
-    def _extract_html_from_ui_resource(self, ui_resource: dict[str, Any] | None) -> str | None:
-        """Extract HTML text from UI resource structure."""
-        if not ui_resource or not isinstance(ui_resource, dict):
-            return None
-        
-        resource = ui_resource.get("resource", {})
-        if isinstance(resource, dict):
-            html = resource.get("text")
-            if html:
-                return html
-        
-        # Fallback: if it's a flat dict with 'text' key
-        return ui_resource.get("text") if "text" in ui_resource else None
-
-    def _parse_conversation_to_messages(self, conversation_context: str) -> list[dict[str, str]]:
-        """Parse conversation context string into message list format."""
-        if conversation_context == "No previous conversation history.":
-            return []
-        
-        messages = []
-        for line in conversation_context.split("\n"):
-            if not line.strip():
-                continue
-            parts = line.split(": ", 1)
-            if len(parts) == 2:
-                role = parts[0].lower()
-                content = parts[1]
-                if role in ["user", "assistant", "system"]:
-                    messages.append({"role": role, "content": content})
-        
-        return messages
-
-    def _build_conversation_context(
-        self, previous_messages: list[Message]
-    ) -> str:
-        """
-        Build a conversation context string from previous messages.
-        
-        Args:
-            previous_messages: List of previous messages
-        
-        Returns:
-            Formatted conversation context string
-        """
-        if not previous_messages:
-            return "No previous conversation history."
-        
-        context_parts = []
-        for msg in previous_messages:
-            role = msg.role.value if hasattr(msg.role, "value") else str(msg.role)
-            context_parts.append(f"{role.capitalize()}: {msg.content}")
-        
-        return "\n".join(context_parts)
-
-    def _generate_response(
-        self,
-        tools: list[ToolResponse],
-        user_message: str,
-        conversation_context: str,
-    ) -> str:
-        """
-        Generate a response text using configured LLM provider.
-        
-        Args:
-            tools: The list of tool objects containing tool information
-            user_message: User's current message
-            conversation_context: Formatted conversation history
-        
-        Returns:
-            Generated response text
-        """
-        try:
-            return self._generate_text_response(
-                tools=tools,
-                user_message=user_message,
-                conversation_context=conversation_context,
-            )
-        except Exception as e:
-            logger.error(f"LLM response generation failed: {e}", exc_info=True)
-            return "I'm sorry, I'm having trouble generating a response. Please try again later."
-
     def _generate_text_response(
         self,
         tools: list[ToolResponse],
         user_message: str,
-        conversation_context: str,
+        previous_messages: list[Message],
+        existing_html: str | None = None,
     ) -> str:
         """
         Generate response using the specified provider.
@@ -260,83 +120,28 @@ class LlmChat:
             tools: The list of tool objects containing tool information
             user_message: User's current message
             conversation_context: Formatted conversation history
+            existing_html: Existing HTML content
         
         Returns:
             Generated response text
         """
-        system_prompt = build_text_response_prompt(user_message=user_message, tools=tools)
-        
-        parsed_messages = self._parse_conversation_to_messages(conversation_context)
-        
-        messages = parsed_messages.copy()
-        messages.append({"role": "user", "content": user_message})
-        
-        response_text, _ = self._call_llm(
-            model=self.model_name,
+        system_prompt = build_ui_improvements_response_prompt(tools=tools)
+        messages = []
+        for message in previous_messages[:-1]:
+            messages.append({"role": message.role.value, "content": message.content})
+
+        message_content: list[dict[str, Any]] = [{"type": "text", "text": user_message}]
+        if existing_html:
+            message_content.append({"type": "text", "text": f"\n\n<existing_html>\n{existing_html}\n</existing_html>"})
+        messages.append({"role": "user", "content": message_content})
+
+        response_text, _ = self.llm_client.call(
             messages=messages,
             system=system_prompt,
-            temperature=0.3,  # Balanced: consistent but natural conversation
+            temperature=self.ui_generation_temperature,
             max_tokens=1000,
         )
         return response_text
-
-    def infer_output_schema(
-        self,
-        tool_name: str,
-        tool_description: str,
-        tool_output: Any,
-    ) -> dict[str, Any]:
-        """
-        Infer JSON Schema from tool output using LLM.
-        
-        Args:
-            tool_name: Name of the tool
-            tool_description: Description of the tool
-            tool_output: The actual output from the tool call
-            
-        Returns:
-            Inferred JSON Schema dictionary
-        """
-        import json
-        
-        system_prompt = build_output_schema_inference_prompt(
-            tool_name=tool_name,
-            tool_description=tool_description,
-            tool_output=tool_output,
-        )
-
-        try:
-            messages = [
-                {"role": "system", "content": "You are a JSON Schema expert. Return only valid JSON."},
-                {"role": "user", "content": system_prompt}
-            ]
-            response_text, _ = self._call_llm(
-                model=self.model_name,
-                messages=messages,
-                system="You are a JSON Schema expert. Return only valid JSON.",
-                temperature=0.1,
-                max_tokens=2000,
-            )
-            if "```json" in response_text:
-                response_text = response_text.split("```json")[1].split("```")[0].strip()
-            elif "```" in response_text:
-                response_text = response_text.split("```")[1].split("```")[0].strip()
-            
-            schema = json.loads(response_text)
-            logger.info(f"Successfully inferred schema for tool '{tool_name}'")
-            return schema
-        except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse inferred schema as JSON: {e}")
-            return {
-                "type": "object",
-                "description": "Schema inference failed. Please review the tool output manually.",
-            }
-        except Exception as e:
-            logger.error(f"Schema inference error: {e}", exc_info=True)
-            return {
-                "type": "object",
-                "description": f"Schema inference failed: {str(e)}",
-            }
 
     def _fetch_designs_for_llm(self) -> dict[str, Any]:
         """
@@ -371,9 +176,9 @@ class LlmChat:
     def _prepare_ui_generation_context(
         self,
         widget_id: str,
+        project_id: str,
         tools: list[ToolResponse],
-        user_message: str,
-        conversation_context: str,
+        user_message: str
     ) -> tuple[str | None, dict[str, Any], str, str]:
         """
         Common preparation for UI generation (retrieve existing UI, fetch designs, build prompts).
@@ -383,45 +188,34 @@ class LlmChat:
         """
         # Retrieve existing UI resource if available
         existing_ui = None
-        try:
-            from app.db.storage.ui_widget_resource_repository import (
-                UiWidgetResourceRepository,
-            )
-            resource_repo = UiWidgetResourceRepository()
-            latest_resource = resource_repo.get_latest_by_widget_id(widget_id)
-            if latest_resource and latest_resource.resource:
-                existing_ui = latest_resource.resource
-                logger.debug(f"Found existing UI resource for widget {widget_id}")
-        except Exception as e:
-            logger.warning(f"Failed to retrieve existing UI resource for widget {widget_id}: {e}")
-        
-        existing_html = self._extract_html_from_ui_resource(existing_ui)
-        
-        # Fetch designs from database
+        from app.db.storage.ui_widget_resource_repository import (
+            UiWidgetResourceRepository,
+        )
+        resource_repo = UiWidgetResourceRepository()
+        latest_resource = resource_repo.get_latest_by_widget_id(widget_id, project_id)
+        if latest_resource and latest_resource.resource:
+            existing_ui = latest_resource.resource
+            logger.debug(f"Found existing UI resource for widget {widget_id}")
+        existing_html = extract_html_from_ui_resource(existing_ui)
         designs = self._fetch_designs_for_llm()
         
-        # Build enhanced system prompt with code quality guidelines
-        system_prompt = build_ui_generation_prompt_base(
+        system_prompt = build_ui_generation_system_prompt(
             tools=tools,
             user_message=user_message,
-            conversation_context=conversation_context,
             has_existing_ui=existing_html is not None,
             designs=designs,
         )
-        
-        # Build user message
+
         user_content = build_ui_generation_user_message(
             user_message=user_message
         )
-        
+
         return existing_html, designs, system_prompt, user_content
 
     def _process_ui_generation_response(
         self,
         raw_html: str,
-        finish_reason: str | None,
-        input_tokens: int,
-        output_tokens: int
+        finish_reason: str | None
     ) -> dict[str, Any]:
         """
         Common post-processing for UI generation (extract, clean, validate HTML).
@@ -435,52 +229,48 @@ class LlmChat:
         Returns:
             Dictionary with html_content key, or None if processing fails
         """
-        # Extract and clean HTML content
         html_content = self._extract_clean_html(raw_html)
-        logger.debug(f"Cleaned HTML length: {len(html_content)} chars")
-        
-        # Validate generated HTML
         validation_errors = self._validate_generated_html(html_content)
         if validation_errors:
             logger.warning(f"HTML validation found issues: {validation_errors}")
-        
-        # Check if HTML appears incomplete (especially if truncated)
         if (finish_reason != "stop") or self._is_html_incomplete(html_content):
             logger.error(
                 f"🚨 INCOMPLETE HTML DETECTED - The generated HTML may be truncated. "
                 "Check logs above for token usage and consider increasing max_tokens."
             )
             logger.error(
-                f"💡 SOLUTION: Increase LLM_UI_MAX_TOKENS environment variable (currently: {self.settings.llm_ui_max_tokens})"
+                f"💡 SOLUTION: Increase LLM_UI_MAX_TOKENS environment variable (currently: {self.max_ui_tokens})"
             )
-        
         return {"html_content": html_content}
-
 
     def _generate_ui_resource(
         self,
         widget_id: str,
+        project_id: str,
         tools: list[ToolResponse],
         user_message: str,
-        conversation_context: str,
+        previous_messages: list[Message],
     ) -> dict[str, Any]:
         """
         Generate UI resource based on the tools and conversation context.
         
         Args:
             widget_id: The ID of the widget (used to retrieve existing UI)
+            project_id: The ID of the project
             tools: The list of tool objects containing tool information
             user_message: User's current message
-            conversation_context: Formatted conversation history
+            previous_messages: Previous messages in the conversation
         
         Returns:
             UI resource dictionary
         """
         existing_html, designs, system_prompt, user_content = self._prepare_ui_generation_context(
-            widget_id=widget_id,
-            tools=tools, user_message=user_message, conversation_context=conversation_context)
+            widget_id=widget_id, project_id=project_id, tools=tools, user_message=user_message)
         
         message_content: list[dict[str, Any]] = [{"type": "text", "text": user_content}]
+        if existing_html:
+            message_content.append({"type": "text", "text": f"\n\n<existing_html>\n{existing_html}\n</existing_html>"})
+
         logos = designs.get("logos", [])
         if logos:
             logger.debug(f"Including {len(logos)} logo image(s) in LLM message for visual inspiration")
@@ -517,20 +307,20 @@ class LlmChat:
             logger.debug(f"Existing HTML present: {existing_html is not None}, Length: {len(existing_html) if existing_html else 0}")
             total_images = len(logos) + len(ux_designs)
             logger.debug(f"Message content blocks: {len(message_content)} (1 text + {total_images} images: {len(logos)} logos + {len(ux_designs)} UX designs)")
-            messages = [{"role": "user", "content": message_content}]
-            raw_html, usage_info = self._call_llm(
-                model=self.model_name,
+            messages = []
+            for message in previous_messages[:-1]:
+                messages.append({"role": message.role.value, "content": message.content})
+            messages.append({"role": "user", "content": message_content})
+            raw_html, usage_info = self.llm_client.call(
                 messages=messages,
                 system=system_prompt,
-                temperature=0.1,  # Lower temperature for more deterministic, accurate code
-                max_tokens=self.settings.llm_ui_max_tokens,
+                temperature=self.ui_generation_temperature,
+                max_tokens=self.max_ui_tokens,
             )
 
             return self._process_ui_generation_response(
                 raw_html=raw_html,
-                finish_reason=usage_info.get("finish_reason"),
-                input_tokens=usage_info.get("input_tokens", 0),
-                output_tokens=usage_info.get("output_tokens", 0)
+                finish_reason=usage_info.get("finish_reason")
             )
         except Exception as e:
             logger.error(f"LLM UI generation error: {e}", exc_info=True)
