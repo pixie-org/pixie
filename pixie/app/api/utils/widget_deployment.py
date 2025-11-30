@@ -116,7 +116,7 @@ def get_widget_toolkit_sources(widget: Widget) -> list[ToolkitSource]:
     
     return sources
 
-def generate_mcp_server_configuration(widget: Widget) -> dict[str, Any]:
+def generate_mcp_server_configuration(widget: Widget) -> dict[str, Any] | None:
     """
     Generate MCP server configuration for a widget.
     Returns a config dict in the format:
@@ -138,7 +138,8 @@ def generate_mcp_server_configuration(widget: Widget) -> dict[str, Any]:
     """
     # Get all toolkit sources for this widget
     toolkit_sources = get_widget_toolkit_sources(widget)
-    
+    if len(toolkit_sources) == 0:
+        return None
     # Build FastMCP proxy configuration
     mcp_config = build_fastmcp_proxy_config(toolkit_sources)
     
@@ -261,7 +262,6 @@ tool_meta = {{
     "openai/toolInvocation/invoking": f"Preparing your {widget_name}…",
     "openai/toolInvocation/invoked": f"{widget_name} ready.",
     "openai/widgetAccessible": True,
-    "openai/visibility": "private", 
     "openai/resultCanProduceWidget": True,
     "annotations": {{
         "destructiveHint": False,
@@ -340,7 +340,7 @@ def create_deployment(widget_id: str, project_id: str, server_type: WidgetServer
     # Generate MCP server configuration
     mcp_config = generate_mcp_server_configuration(widget)
     
-    if not mcp_config.get("mcpServers"):
+    if mcp_config is not None and len(mcp_config.get("mcpServers", {})) == 0:
         raise ValueError(f"No MCP server configurations found for widget {widget_id}")
 
     server_name = f"{widget_name_slug}-server"

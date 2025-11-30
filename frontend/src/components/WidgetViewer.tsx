@@ -47,6 +47,7 @@ export const WidgetViewer: React.FC<WidgetViewerProps> = ({
   const [toolDetail, setToolDetail] = useState<ToolDetailResponse | null>(null);
   const [toolkit, setToolkit] = useState<ToolkitDetail | null>(null);
   const [source, setSource] = useState<ToolkitSourceDetail | null>(null);
+  const [isLoadingWidget, setIsLoadingWidget] = useState(true);
   const [connectionConfig, setConnectionConfig] = useState<{
     url: string;
     transportType: "streamable-http";
@@ -63,10 +64,10 @@ export const WidgetViewer: React.FC<WidgetViewerProps> = ({
   useEffect(() => {
     const loadWidgetData = async () => {
       try {
+        setIsLoadingWidget(true);
         const widgetData = await getWidget(widgetId, projectId);
         setWidget(widgetData);
         
-        // Get the first tool's detail
         if (widgetData.tool_ids && widgetData.tool_ids.length > 0) {
           const tool = await getToolDetail(widgetData.tool_ids[0], projectId);
           setToolDetail(tool);
@@ -88,6 +89,8 @@ export const WidgetViewer: React.FC<WidgetViewerProps> = ({
         }
       } catch (error) {
         console.error('[WidgetViewer] Failed to load widget data:', error);
+      } finally {
+        setIsLoadingWidget(false);
       }
     };
     
@@ -217,13 +220,24 @@ export const WidgetViewer: React.FC<WidgetViewerProps> = ({
     return <div className="flex items-center justify-center h-full"><p className="text-muted-foreground">Unsupported resource</p></div>;
   }
 
-  // Don't render iframe until MCP connection is complete
-  const isConnectionReady = connectionStatus === "connected" && mcpClient !== null;
-  const isConnecting = connectionConfig && (
+  const widgetHasTools = widget && widget.tool_ids && widget.tool_ids.length > 0;
+  const isConnectionReady = !widgetHasTools || (connectionStatus === "connected" && mcpClient !== null);
+  const isConnecting = widgetHasTools && connectionConfig && (
     connectionStatus === "disconnected" || 
     (hasAttemptedConnectionRef.current && connectionStatus !== "connected" && connectionStatus !== "error" && connectionStatus !== "error-connecting-to-proxy")
   );
   const hasConnectionError = connectionStatus === "error" || connectionStatus === "error-connecting-to-proxy";
+
+  if (isLoadingWidget || (widgetHasTools && !connectionConfig)) {
+    return (
+      <div className="flex items-center justify-center h-full bg-background">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          <p className="text-sm text-muted-foreground">Loading widget configuration...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (isConnecting) {
     return (
@@ -257,18 +271,6 @@ export const WidgetViewer: React.FC<WidgetViewerProps> = ({
             </Button>
           </AlertDescription>
         </Alert>
-      </div>
-    );
-  }
-
-  // Show loading state if no connection config yet
-  if (!connectionConfig) {
-    return (
-      <div className="flex items-center justify-center h-full bg-background">
-        <div className="flex flex-col items-center gap-4">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-          <p className="text-sm text-muted-foreground">Loading widget configuration...</p>
-        </div>
       </div>
     );
   }

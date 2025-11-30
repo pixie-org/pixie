@@ -3,9 +3,12 @@ from fastmcp import FastMCP
 
 {{ pixie_sdk_import }}
 
+{% if mcp_config %}
 mcp_config = {{ mcp_config_json|safe }}
-
 mcp = FastMCP.as_proxy(mcp_config, name="{{ server_name }}")
+{% else %}
+mcp = FastMCP(name="{{ server_name }}")
+{% endif %}
 
 {% if tool_functions %}
 {% for tool_func in tool_functions %}

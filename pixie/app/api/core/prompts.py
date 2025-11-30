@@ -170,6 +170,38 @@ CONTEXT:
 - User's Request: {user_message}
 - Conversation History: {formatted_context}{designs_section}
 
+"""
+
+    if has_existing_ui:
+        prompt += """
+CRITICAL - MODIFYING EXISTING UI - ABSOLUTE REQUIREMENTS:
+
+THERE IS AN EXISTING UI. YOU MUST FOLLOW THESE RULES WITH ABSOLUTE PRECISION.
+
+Step 1: Read the user's request carefully and identify EXACTLY what they want changed
+Step 2: Locate the EXACT code section in the existing HTML that needs modification
+Step 3: Make ONLY the minimal change required - nothing more
+Step 4: Copy ALL other code exactly as it appears - character by character
+Step 5: Verify that your change doesn't affect any other part of the code
+Step 6: Ensure the change integrates seamlessly without breaking anything
+
+## EXAMPLES OF CORRECT BEHAVIOR
+   User: "change the button color to blue"
+   ✓ CORRECT: Find the button, change ONLY its color property, keep everything else identical
+   ✗ WRONG: Change button color AND modify layout, spacing, or other styles
+
+   User: "add a new input field"
+   ✓ CORRECT: Add ONLY the new input field, keep all existing fields and code unchanged
+   ✗ WRONG: Add input field AND modify existing fields, styles, or structure
+
+   User: "remove the header"
+   ✓ CORRECT: Remove ONLY the header element, keep everything else exactly as it was
+   ✗ WRONG: Remove header AND modify layout, spacing, or other components
+
+REMEMBER: Your ONLY job is to make the EXACT change requested. Everything else must remain IDENTICAL to the existing code.
+"""
+
+    prompt += """
 CODE QUALITY REQUIREMENTS (CRITICAL - FOLLOW STRICTLY):
 
 1. STRUCTURAL VALIDITY:
@@ -240,41 +272,7 @@ CODE QUALITY REQUIREMENTS (CRITICAL - FOLLOW STRICTLY):
      * Verify all functions are complete
      * Ensure React component tree is complete
      * Check that all required imports are present"""
-    
-    if has_existing_ui:
-        prompt += """
 
-CRITICAL - MODIFYING EXISTING UI (STRICT REQUIREMENTS):
-There is an existing UI for this tool. You MUST follow these rules STRICTLY:
-
-1. CHANGE ONLY WHAT IS REQUESTED:
-   - Make ONLY the specific change requested by the user - nothing more, nothing less
-   - Do NOT modify, remove, or add any features, components, or styles that are not explicitly requested
-   - Do NOT "improve" or "optimize" anything unless the user explicitly asks for it
-   - Do NOT change the overall structure, layout, or design unless specifically requested
-   - Do NOT update dependencies, refactor code, or make stylistic changes unless asked
-
-2. PRESERVE EVERYTHING ELSE:
-   - Keep ALL existing features, components, and functionality exactly as they are
-   - Preserve ALL existing CSS classes, styles, and styling exactly as they are
-   - Maintain the exact same component structure and architecture
-   - Keep all existing event handlers, state management, and logic unchanged
-   - Preserve all existing tool calls and their implementations
-   - Keep all existing HTML structure, IDs, classes, and attributes
-
-3. INCREMENTAL MODIFICATION:
-   - Identify the specific element, component, or section that needs to change
-   - Make the minimal change required to fulfill the user's request
-   - Ensure the change integrates seamlessly without affecting anything else
-   - Test mentally that your change doesn't break existing functionality
-
-4. EXAMPLES:
-   - If user says "change the button color to blue" → ONLY change that button's color, nothing else
-   - If user says "add a new input field" → ONLY add the input field, don't modify existing fields
-   - If user says "update the title text" → ONLY change the title text, don't change layout or styles
-   - If user says "remove the header" → ONLY remove the header, keep everything else intact
-
-REMEMBER: The user is making a specific request. Your job is to fulfill that request precisely, not to make additional improvements or changes."""
     
     prompt += """
 
@@ -325,9 +323,7 @@ When calling tools:
 
 
 def build_ui_generation_user_message(
-    tools: list[Tool],
     user_message: str,
-    existing_html: str | None = None,
 ) -> str:
     """
     Build user message for UI generation request.
@@ -340,22 +336,7 @@ def build_ui_generation_user_message(
     Returns:
         Formatted user message
     """
-    if existing_html:
-        # When modifying existing HTML, be very explicit about only making the requested change
-        user_content = f"""User's specific request: {user_message}
-
-CRITICAL INSTRUCTIONS FOR MODIFICATION:
-- There is existing HTML below. You MUST make ONLY the change requested above.
-- Do NOT modify anything else - preserve all other features, styles, and functionality exactly as they are.
-- Make the minimal change needed to fulfill the user's request.
-
-Existing UI HTML (preserve everything except the specific change requested):
-```html
-{existing_html[:8000]}
-```"""
-    else:
-        # For new UI generation, use design images for inspiration
-        user_content = f"""Generate a React HTML UI for tools based on the user's request: {user_message}
+    user_content = f"""Generate a new or update the existing React HTML UI for tools based on the user's request: {user_message}
 
 IMPORTANT: If design images (logos or UX designs) are included in this message, use them as visual inspiration for:
 - Color schemes and palette

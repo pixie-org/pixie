@@ -316,12 +316,20 @@ const WidgetUxEdit = () => {
   }
 
   return (
-    <div className="space-y-4 h-[calc(100vh-8rem)] flex flex-col">
-      <div className="flex items-center justify-between flex-shrink-0">
-        <div className="flex items-center gap-4">
+    <div className="space-y-2 h-[calc(100vh-6rem)] flex flex-col">
+      <div className="flex items-center justify-between flex-shrink-0 py-1">
+        <div className="flex items-center gap-3">
           <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
             <ArrowLeft className="h-4 w-4" />
           </Button>
+          <Collapsible open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>
+            <CollapsibleTrigger asChild>
+              <div className="flex items-center gap-2 cursor-pointer hover:bg-muted/50 transition-colors px-2 py-1 rounded-md">
+                <span className="text-lg font-semibold">{widget.name}</span>
+                <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${isDetailsOpen ? 'rotate-180' : ''}`} />
+              </div>
+            </CollapsibleTrigger>
+          </Collapsible>
         </div>
         <div className="flex gap-2">
           <Button
@@ -357,22 +365,15 @@ const WidgetUxEdit = () => {
         </div>
       </div>
 
-      <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-4 min-h-0 overflow-hidden">
-        <div className="flex flex-col gap-4 min-h-0">
+        <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-2 min-h-0 overflow-hidden">
+        <div className="flex flex-col gap-2 min-h-0">
           <Card className="flex-shrink-0">
             <Collapsible open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>
-              <CollapsibleTrigger asChild>
-                <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1">
-                      <CardTitle className="text-xl">{widget.name}</CardTitle>
-                    </div>
-                    <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${isDetailsOpen ? 'rotate-180' : ''}`} />
-                  </div>
-                </CardHeader>
-              </CollapsibleTrigger>
               <CollapsibleContent>
-                <CardContent className="space-y-4">
+                <CardHeader className="pb-2 pt-3">
+                  <CardTitle className="text-lg">{widget.name}</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3 pt-0">
                   <div className="space-y-2">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-medium text-muted-foreground">ID:</span>
@@ -424,11 +425,11 @@ const WidgetUxEdit = () => {
           </Card>
 
           <Card className="flex-1 flex flex-col min-h-0">
-            <CardHeader className="pb-3">
+            <CardHeader className="pb-2 pt-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle className="text-lg">Chat Assistant</CardTitle>
-                  <CardDescription>Suggest changes to improve the widget's UX</CardDescription>
+                  <CardTitle className="text-base">Chat Assistant</CardTitle>
+                  <CardDescription className="text-xs">Suggest changes to improve the widget's UX</CardDescription>
                 </div>
                 <div className="flex items-center gap-2">
                   {isConnecting && (
@@ -443,7 +444,7 @@ const WidgetUxEdit = () => {
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="flex-1 flex flex-col min-h-0 gap-3">
+            <CardContent className="flex-1 flex flex-col min-h-0 gap-2 pt-3">
               {chatError && (
                 <div className="text-sm text-destructive bg-destructive/10 p-2 rounded-md flex items-center justify-between">
                   <span>{chatError}</span>
@@ -457,10 +458,10 @@ const WidgetUxEdit = () => {
                   </Button>
                 </div>
               )}
-              <ScrollArea ref={chatScrollAreaRef} className="flex-1 pr-4">
-                <div className="space-y-4">
+              <ScrollArea ref={chatScrollAreaRef} className="flex-1 pr-3">
+                <div className="space-y-3">
                   {wsMessages.length === 0 && (
-                    <div className="text-center text-sm text-muted-foreground py-8">
+                    <div className="text-center text-sm text-muted-foreground py-4">
                       {isConnecting ? (
                         <p>Connecting to chat...</p>
                       ) : (
@@ -474,7 +475,7 @@ const WidgetUxEdit = () => {
                       className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
                     >
                       <div
-                        className={`max-w-[80%] rounded-lg px-3 py-2 text-sm ${message.role === "user"
+                        className={`max-w-[80%] rounded-lg px-2 py-1.5 text-sm ${message.role === "user"
                           ? "bg-primary text-primary-foreground"
                           : message.role === "system"
                             ? "bg-muted/50 text-muted-foreground italic"
@@ -512,8 +513,8 @@ const WidgetUxEdit = () => {
                       handleSendMessage();
                     }
                   }}
-                  rows={2}
-                  className="resize-none"
+                  rows={1}
+                  className="resize-none text-sm"
                   disabled={!isConnected}
                 />
                 <Button
@@ -533,13 +534,13 @@ const WidgetUxEdit = () => {
           </Card>
         </div>
 
-        <div className="flex flex-col gap-4 min-h-0 overflow-hidden">
+        <div className="flex flex-col gap-2 min-h-0 overflow-hidden">
           <Card className="flex-1 flex flex-col min-h-0 overflow-hidden">
-            <CardHeader className="pb-3">
+            <CardHeader className="pb-2 pt-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle className="text-lg">{showCode ? "Code" : "Preview"}</CardTitle>
-                  <CardDescription>
+                  <CardTitle className="text-base">{showCode ? "Code" : "Preview"}</CardTitle>
+                  <CardDescription className="text-xs">
                     {showCode ? "HTML source code" : "Live preview of the widget interface"}
                   </CardDescription>
                 </div>
@@ -570,7 +571,7 @@ const WidgetUxEdit = () => {
               </div>
             </CardHeader>
             <CardContent className="flex-1 flex flex-col min-h-0 p-0">
-              <div className="flex-1 border rounded-lg overflow-hidden bg-background m-6">
+              <div className="flex-1 border rounded-lg overflow-hidden bg-background m-2">
                 {currentUiResourceHtml ? (
                   showCode ? (
                     <ScrollArea className="h-full">

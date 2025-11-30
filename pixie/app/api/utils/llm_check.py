@@ -15,14 +15,15 @@ def require_llm_keys() -> None:
     
     has_openai = bool(settings.openai_api_key)
     has_anthropic = bool(settings.anthropic_api_key)
+    has_google = bool(settings.gemini_api_key)
     
-    if not has_openai and not has_anthropic:
+    if not has_openai and not has_anthropic and not has_google:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=(
                 "LLM functionality is unavailable. "
-                "Please configure either OPENAI_API_KEY or ANTHROPIC_API_KEY in your environment variables. "
-                "See the setup documentation for more information."
+                "Please configure at least one of OPENAI_API_KEY, ANTHROPIC_API_KEY, or GEMINI_API_KEY"
+                "in your environment variables. See the setup documentation for more information."
             )
         )
 

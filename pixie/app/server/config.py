@@ -54,7 +54,7 @@ class Settings(BaseSettings):
     # LLM Configuration
     llm_provider: str = Field(
         default="openai",
-        description="LLM provider to use: 'openai' or 'claude'"
+        description="LLM provider to use: 'openai', 'claude', or 'gemini'"
     )
     openai_api_key: str | None = Field(
         default=None,
@@ -71,6 +71,14 @@ class Settings(BaseSettings):
     claude_model: str = Field(
         default="claude-haiku-4-5-20251001",
         description="Claude model to use. Available models: claude-3-5-sonnet-20240620, claude-3-opus-20240229, claude-3-sonnet-20240229, claude-3-haiku-20240307, claude-3-5-haiku-20241022"
+    )
+    gemini_api_key: str | None = Field(
+        default=None,
+        description="Gemini API key"
+    )
+    gemini_model: str = Field(
+        default="gemini-flash-latest",
+        description="Gemini model to use (e.g., gemini-3-pro-preview, gemini-flash-latest)"
     )
     llm_ui_max_tokens: int = Field(
         default=16000,

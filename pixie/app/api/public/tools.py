@@ -620,9 +620,18 @@ def list_tools(
         repo = McpToolRepository()
         tools = repo.list_all(project_id=project_id)
         
-        return [
-            ToolListResponse.model_validate(t.model_dump()) for t in tools
-        ]
+        result = []
+        for t in tools:
+            tool_dict = t.model_dump()
+            output_schema = tool_dict.get("outputSchema")
+            has_output_schema = (
+                output_schema is not None 
+                and (isinstance(output_schema, dict) and len(output_schema) > 0)
+            )
+            tool_dict["hasOutputSchema"] = has_output_schema
+            result.append(ToolListResponse.model_validate(tool_dict))
+        
+        return result
     except Exception as e:
         logger.exception(f"Error listing tools: {str(e)}")
         raise HTTPException(

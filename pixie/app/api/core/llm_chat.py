@@ -1,11 +1,11 @@
 """LLM chat service for generating responses and UI resources."""
 import base64
 import logging
+import os
 import re
 from typing import Any
 
-from anthropic import Anthropic
-from openai import OpenAI
+import litellm
 
 from app.api.core.prompts import (
     build_text_response_prompt,
@@ -30,33 +30,86 @@ class LlmChat:
     - Text responses based on user messages and conversation history
     - UI resources (React HTML) that match the tool's context and user needs
     
-    Supports OpenAI (default) and Anthropic (Claude) providers, configured via environment variables.
+    Supports OpenAI, Anthropic (Claude), and Google (Gemini) providers via litellm unified interface.
     """
 
     def __init__(self):
         """Initialize the LLM chat service with configured provider."""
         settings = get_settings()
-
-        # Initialize OpenAI client if API key is provided
-        self.openai_client: OpenAI | None = None
-        if settings.openai_api_key:
-            try:
-                self.openai_client = OpenAI(api_key=settings.openai_api_key)
-                logger.info(f"OpenAI client initialized with model: {settings.openai_model}")
-            except Exception as e:
-                logger.warning(f"Failed to initialize OpenAI client: {e}")
-
-        # Initialize Anthropic client if API key is provided
-        self.anthropic_client: Anthropic | None = None
-        if settings.anthropic_api_key:
-            try:
-                self.anthropic_client = Anthropic(api_key=settings.anthropic_api_key)
-                logger.info(f"Anthropic client initialized with model: {settings.claude_model}")
-            except Exception as e:
-                logger.warning(f"Failed to initialize Anthropic client: {e}")
-        
-        # Store settings for model selection
         self.settings = settings
+        self.model_name = self._get_litellm_model_name(settings)
+
+    def _get_litellm_model_name(self, settings):
+        """Configure litellm with API keys from settings."""
+        if settings.llm_provider == "openai":
+            os.environ["OPENAI_API_KEY"] = settings.openai_api_key
+            if not settings.openai_model:
+                raise ValueError("OpenAI model is not configured. Please set OPENAI_MODEL in your environment variables.")
+            return settings.openai_model
+        elif settings.llm_provider == "claude":
+            os.environ["ANTHROPIC_API_KEY"] = settings.anthropic_api_key
+            if not settings.claude_model:
+                raise ValueError("Claude model is not configured. Please set CLAUDE_MODEL in your environment variables.")
+            return f"anthropic/{settings.claude_model}"
+        elif settings.llm_provider == "gemini":
+            os.environ["GEMINI_API_KEY"] = settings.gemini_api_key
+            if not settings.gemini_model:
+                raise ValueError("Gemini model is not configured. Please set GEMINI_MODEL in your environment variables.")
+            return f"gemini/{settings.gemini_model}"
+        else:
+            raise ValueError(f"Unknown provider: {settings.llm_provider}")
+
+    def _call_llm(
+        self,
+        model: str,
+        messages: list[dict[str, Any]],
+        system: str | None = None,
+        temperature: float = 0.2,
+        max_tokens: int = 1000
+    ) -> tuple[str, dict[str, Any]]:
+        """
+        Unified LLM call interface using litellm.
+        
+        Args:
+            model: litellm model name (e.g., "gpt-4o", "claude/claude-3-5-sonnet-20240620")
+            messages: List of message dicts with "role" and "content" keys
+            system: Optional system message
+            temperature: Temperature for generation
+            max_tokens: Maximum tokens to generate
+    
+        Returns:
+            Tuple of (response_text, usage_info)
+        """
+        try:
+            litellm_messages = messages.copy()
+            if system:
+                if litellm_messages and litellm_messages[0].get("role") == "system":
+                    litellm_messages[0] = {"role": "system", "content": system}
+                else:
+                    litellm_messages.insert(0, {"role": "system", "content": system})
+            response = litellm.completion(
+                model=model,
+                messages=litellm_messages,
+                temperature=temperature,
+                max_tokens=max_tokens
+            )
+            response_text = response.choices[0].message.content or ""
+
+            usage_info = {
+                "input_tokens": getattr(response.usage, "prompt_tokens", 0) if hasattr(response, "usage") else 0,
+                "output_tokens": getattr(response.usage, "completion_tokens", 0) if hasattr(response, "usage") else 0,
+                "finish_reason": response.choices[0].finish_reason if response.choices else None,
+            }
+
+            logger.info(
+                f"LLM response generated successfully - "
+                f"Model: {model}, Tokens: {usage_info['input_tokens']} input + {usage_info['output_tokens']} output, "
+                f"Response length: {len(response_text)} chars"
+            )
+            return response_text, usage_info
+        except Exception as e:
+            logger.error(f"litellm API error for model {model}: {e}", exc_info=True)
+            raise
 
     def generate_response(
         self,
@@ -178,88 +231,32 @@ class LlmChat:
         
         Args:
             tools: The list of tool objects containing tool information
-            html_content: The HTML content generatedd
             user_message: User's current message
             conversation_context: Formatted conversation history
         
         Returns:
             Generated response text
         """
-        provider = (self.settings.llm_provider or "openai").lower()
+        try:
+            return self._generate_text_response(
+                tools=tools,
+                user_message=user_message,
+                conversation_context=conversation_context,
+            )
+        except Exception as e:
+            logger.error(f"LLM response generation failed: {e}", exc_info=True)
+            return "I'm sorry, I'm having trouble generating a response. Please try again later."
 
-        # Use OpenAI if configured and provider matches (default)
-        if self.openai_client and provider in ("openai", "default"):
-            try:
-                return self._generate_text_response_with_provider(
-                    provider="openai",
-                    tools=tools,
-                    user_message=user_message,
-                    conversation_context=conversation_context,
-                )
-            except Exception as e:
-                logger.error(f"OpenAI response generation failed: {e}, trying other providers")
-
-        # Use Claude if configured and provider matches
-        if self.anthropic_client and provider == "claude":
-            try:
-                return self._generate_text_response_with_provider(
-                    provider="claude",
-                    tools=tools,
-                    user_message=user_message,
-                    conversation_context=conversation_context,
-                )
-            except Exception as e:
-                logger.error(f"Claude response generation failed: {e}, falling back to fallback response")
-
-        # If provider preference isn't available, try whichever client exists
-        if self.openai_client:
-            try:
-                return self._generate_text_response_with_provider(
-                    provider="openai",
-                    tools=tools,
-                    user_message=user_message,
-                    conversation_context=conversation_context,
-                )
-            except Exception as e:
-                logger.error(f"OpenAI fallback response generation failed: {e}")
-        if self.anthropic_client:
-            try:
-                return self._generate_text_response_with_provider(
-                    provider="claude",
-                    tools=tools,
-                    user_message=user_message,
-                    conversation_context=conversation_context,
-                )
-            except Exception as e:
-                logger.error(f"Claude fallback response generation failed: {e}")
-        
-        # Fallback response
-        logger.warning(f"No LLM available or provider mismatch. Using fallback response. Provider: {self.settings.llm_provider}, Claude available: {self.anthropic_client is not None}")
-        
-        num_previous = len(conversation_context.split("\n")) if conversation_context != "No previous conversation history." else 0
-        
-        tool_display_names = [tool.title or tool.name for tool in tools]
-        response = f"Thank you for your message: '{user_message}'. "
-        if num_previous > 0:
-            response += f"I can see we've had {num_previous} previous exchanges in this conversation. "
-        response += f"I'm working with the tools '{tool_display_names}'. "
-        response += "In a real implementation, this response would be generated by an LLM based on the tool's configuration, "
-        response += "conversation history, and your specific request. The UI resource below has been updated accordingly."
-        
-        return response
-
-    def _generate_text_response_with_provider(
+    def _generate_text_response(
         self,
-        provider: str,
         tools: list[ToolResponse],
         user_message: str,
         conversation_context: str,
     ) -> str:
         """
-        Generate response using the specified provider (common logic extracted).
+        Generate response using the specified provider.
         
         Args:
-            provider: Either "openai" or "claude"
             tools: The list of tool objects containing tool information
             user_message: User's current message
             conversation_context: Formatted conversation history
@@ -267,68 +264,21 @@ class LlmChat:
         Returns:
             Generated response text
         """
-        # Common: Build system prompt
         system_prompt = build_text_response_prompt(user_message=user_message, tools=tools)
         
-        # Common: Parse conversation context
         parsed_messages = self._parse_conversation_to_messages(conversation_context)
         
-        if provider == "openai":
-            if not self.openai_client:
-                raise ValueError("OpenAI client not initialized")
-            
-            # OpenAI: Include system message in messages array
-            messages = [{"role": "system", "content": system_prompt}]
-            messages.extend(parsed_messages)  # type: ignore[arg-type]
-            messages.append({"role": "user", "content": user_message})
-            
-            try:
-                logger.debug(
-                    f"Calling OpenAI API with model: {self.settings.openai_model}, "
-                    f"message count: {len(messages)}"
-                )
-                response = self.openai_client.chat.completions.create(
-                    model=self.settings.openai_model,
-                    messages=messages,  # type: ignore[arg-type]
-                    temperature=0.2,
-                    max_tokens=800,
-                )
-                response_text = response.choices[0].message.content or ""
-                logger.info(f"OpenAI response generated successfully ({len(response_text)} chars)")
-            except Exception as e:
-                logger.error(f"OpenAI API error: {e}", exc_info=True)
-                raise
-        else:  # claude
-            if not self.anthropic_client:
-                raise ValueError("Anthropic client not initialized")
-            
-            # Claude: Filter out system messages and use separate system parameter
-            messages = [msg for msg in parsed_messages if msg["role"] != "system"]  # type: ignore
-            messages.append({"role": "user", "content": user_message})  # type: ignore
-            
-            try:
-                logger.debug(f"Calling Anthropic API with model: {self.settings.claude_model}, message count: {len(messages)}")
-                response = self.anthropic_client.messages.create(
-                    model=self.settings.claude_model,
-                    max_tokens=1000,
-                    system=system_prompt,
-                    messages=messages,  # type: ignore
-                )
-                # Claude returns a list of text blocks
-                response_text = response.content[0].text if response.content else ""
-                logger.info(f"Claude response generated successfully ({len(response_text)} chars)")
-            except Exception as e:
-                logger.error(f"Anthropic API error: {e}", exc_info=True)
-                raise
+        messages = parsed_messages.copy()
+        messages.append({"role": "user", "content": user_message})
         
-        # Common: Clean HTML from response
-        cleaned_text = self._clean_html_from_text(response_text)
-        if cleaned_text != response_text:
-            logger.warning(
-                f"Removed HTML from {provider} text response ({len(response_text)} -> {len(cleaned_text)} chars)"
-            )
-        
-        return cleaned_text
+        response_text, _ = self._call_llm(
+            model=self.model_name,
+            messages=messages,
+            system=system_prompt,
+            temperature=0.3,  # Balanced: consistent but natural conversation
+            max_tokens=1000,
+        )
+        return response_text
 
     def infer_output_schema(
         self,
@@ -355,128 +305,38 @@ class LlmChat:
             tool_output=tool_output,
         )
 
-        provider = self.settings.llm_provider.lower() if self.settings.llm_provider else "openai"
-        
-        if provider == "openai":
-            if not self.openai_client:
-                raise ValueError("OpenAI client not initialized")
-            
-            try:
-                response = self.openai_client.chat.completions.create(
-                    model=self.settings.openai_model,
-                    messages=[
-                        {"role": "system", "content": "You are a JSON Schema expert. Return only valid JSON."},
-                        {"role": "user", "content": system_prompt}
-                    ],
-                    temperature=0.1,
-                    max_tokens=2000,
-                    response_format={"type": "json_object"} if hasattr(self.openai_client.chat.completions.create, "__annotations__") else None,
-                )
-                schema_text = response.choices[0].message.content or "{}"
-            except Exception as e:
-                logger.error(f"OpenAI API error during schema inference: {e}", exc_info=True)
-                raise
-        else:  # claude
-            if not self.anthropic_client:
-                raise ValueError("Anthropic client not initialized")
-            
-            try:
-                response = self.anthropic_client.messages.create(
-                    model=self.settings.claude_model,
-                    max_tokens=2000,
-                    system="You are a JSON Schema expert. Return only valid JSON.",
-                    messages=[
-                        {"role": "user", "content": system_prompt}
-                    ],
-                )
-                schema_text = response.content[0].text if response.content else "{}"
-            except Exception as e:
-                logger.error(f"Anthropic API error during schema inference: {e}", exc_info=True)
-                raise
-        
         try:
-            if "```json" in schema_text:
-                schema_text = schema_text.split("```json")[1].split("```")[0].strip()
-            elif "```" in schema_text:
-                schema_text = schema_text.split("```")[1].split("```")[0].strip()
+            messages = [
+                {"role": "system", "content": "You are a JSON Schema expert. Return only valid JSON."},
+                {"role": "user", "content": system_prompt}
+            ]
+            response_text, _ = self._call_llm(
+                model=self.model_name,
+                messages=messages,
+                system="You are a JSON Schema expert. Return only valid JSON.",
+                temperature=0.1,
+                max_tokens=2000,
+            )
+            if "```json" in response_text:
+                response_text = response_text.split("```json")[1].split("```")[0].strip()
+            elif "```" in response_text:
+                response_text = response_text.split("```")[1].split("```")[0].strip()
             
-            schema = json.loads(schema_text)
+            schema = json.loads(response_text)
             logger.info(f"Successfully inferred schema for tool '{tool_name}'")
             return schema
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse inferred schema as JSON: {e}")
-            logger.error(f"Schema text: {schema_text[:500]}")
             return {
                 "type": "object",
                 "description": "Schema inference failed. Please review the tool output manually.",
             }
-
-    def _generate_ui_resource(
-        self,
-        widget_id: str,
-        tools: list[ToolResponse],
-        user_message: str,
-        conversation_context: str,
-    ) -> dict[str, Any]:
-        """
-        Generate a UI resource based on the tools and conversation context.
-        
-        Args:
-            widget_id: The ID of the widget (used to retrieve existing UI)
-            tools: The list of tool objects containing tool information
-            user_message: User's current message
-            conversation_context: Formatted conversation history
-        
-        Returns:
-            UI resource dictionary
-        """
-        provider = (self.settings.llm_provider or "openai").lower()
-
-        if self.openai_client and provider in ("openai", "default"):
-            try:
-                return self._generate_openai_ui_resource(
-                    widget_id=widget_id,
-                    tools=tools,
-                    user_message=user_message,
-                    conversation_context=conversation_context,
-                )
-            except Exception as e:
-                logger.error(f"OpenAI UI generation failed: {e}, trying other providers")
-
-        # Use Claude for UI generation if configured and provider matches
-        if self.anthropic_client and provider == "claude":
-            try:
-                return self._generate_claude_ui_resource(
-                    widget_id=widget_id,
-                    tools=tools,
-                    user_message=user_message,
-                    conversation_context=conversation_context,
-                )
-            except Exception as e:
-                logger.error(f"Claude UI generation failed: {e}, falling back to default UI")
-
-        if self.openai_client:
-            try:
-                return self._generate_openai_ui_resource(
-                    widget_id=widget_id,
-                    tools=tools,
-                    user_message=user_message,
-                    conversation_context=conversation_context,
-                )
-            except Exception as e:
-                logger.error(f"OpenAI fallback UI generation failed: {e}")
-        if self.anthropic_client:
-            try:
-                return self._generate_claude_ui_resource(
-                    widget_id=widget_id,
-                    tools=tools,
-                    user_message=user_message,
-                    conversation_context=conversation_context,
-                )
-            except Exception as e:
-                logger.error(f"Claude fallback UI generation failed: {e}")
-
-        return None
+        except Exception as e:
+            logger.error(f"Schema inference error: {e}", exc_info=True)
+            return {
+                "type": "object",
+                "description": f"Schema inference failed: {str(e)}",
+            }
 
     def _fetch_designs_for_llm(self) -> dict[str, Any]:
         """
@@ -489,14 +349,12 @@ class LlmChat:
             repo = DesignRepository()
             
             # Fetch latest logos (limit to 3 most recent to avoid token limits)
-            # Only include images that are reasonably sized (< 2MB) for Claude API
             logos = [
                 logo for logo in repo.list_by_type(DesignTypeEnum.LOGO)[:5]
                 if logo.file_size < 2 * 1024 * 1024 and logo.content_type.startswith("image/")
             ][:3]  # Limit to 3 logos max
             
             # Fetch latest UX designs (limit to 3 most recent, include images for visual inspiration)
-            # Only include images that are reasonably sized (< 2MB) for Claude API
             ux_designs = [
                 design for design in repo.list_by_type(DesignTypeEnum.UX_DESIGN)[:5]
                 if design.file_size < 2 * 1024 * 1024 and design.content_type.startswith("image/")
@@ -553,9 +411,7 @@ class LlmChat:
         
         # Build user message
         user_content = build_ui_generation_user_message(
-            tools=tools,
-            user_message=user_message,
-            existing_html=existing_html,
+            user_message=user_message
         )
         
         return existing_html, designs, system_prompt, user_content
@@ -565,8 +421,7 @@ class LlmChat:
         raw_html: str,
         finish_reason: str | None,
         input_tokens: int,
-        output_tokens: int,
-        provider: str,
+        output_tokens: int
     ) -> dict[str, Any]:
         """
         Common post-processing for UI generation (extract, clean, validate HTML).
@@ -576,44 +431,33 @@ class LlmChat:
             finish_reason: Finish reason from API response
             input_tokens: Input token count
             output_tokens: Output token count
-            provider: Provider name for logging
         
         Returns:
             Dictionary with html_content key, or None if processing fails
         """
-        # Check for truncation (provider-specific finish reason names)
-        is_truncated = finish_reason in ("max_tokens", "length")
-        truncation_key = "max_tokens" if provider == "claude" else "length"
-        
-        if is_truncated:
-            logger.warning(
-                f"⚠️ {provider.upper()} RESPONSE TRUNCATED - {truncation_key} exceeded! "
-                f"Generated {output_tokens} tokens. Consider increasing LLM_UI_MAX_TOKENS."
-            )
-        
         # Extract and clean HTML content
         html_content = self._extract_clean_html(raw_html)
-        logger.debug(f"Cleaned HTML length ({provider}): {len(html_content)} chars")
+        logger.debug(f"Cleaned HTML length: {len(html_content)} chars")
         
         # Validate generated HTML
         validation_errors = self._validate_generated_html(html_content)
         if validation_errors:
-            logger.warning(f"HTML validation found issues ({provider}): {validation_errors}")
+            logger.warning(f"HTML validation found issues: {validation_errors}")
         
         # Check if HTML appears incomplete (especially if truncated)
-        if is_truncated or self._is_html_incomplete(html_content):
+        if (finish_reason != "stop") or self._is_html_incomplete(html_content):
             logger.error(
-                f"🚨 INCOMPLETE HTML DETECTED ({provider.upper()}) - The generated HTML may be truncated. "
+                f"🚨 INCOMPLETE HTML DETECTED - The generated HTML may be truncated. "
                 "Check logs above for token usage and consider increasing max_tokens."
             )
-            if is_truncated:
-                logger.error(
-                    f"💡 SOLUTION: Increase LLM_UI_MAX_TOKENS environment variable (currently: {self.settings.llm_ui_max_tokens})"
-                )
+            logger.error(
+                f"💡 SOLUTION: Increase LLM_UI_MAX_TOKENS environment variable (currently: {self.settings.llm_ui_max_tokens})"
+            )
         
         return {"html_content": html_content}
 
-    def _generate_claude_ui_resource(
+
+    def _generate_ui_resource(
         self,
         widget_id: str,
         tools: list[ToolResponse],
@@ -621,7 +465,7 @@ class LlmChat:
         conversation_context: str,
     ) -> dict[str, Any]:
         """
-        Generate UI resource using Anthropic Claude API.
+        Generate UI resource based on the tools and conversation context.
         
         Args:
             widget_id: The ID of the widget (used to retrieve existing UI)
@@ -630,180 +474,66 @@ class LlmChat:
             conversation_context: Formatted conversation history
         
         Returns:
-            UI resource dictionary with React HTML
+            UI resource dictionary
         """
-        if not self.anthropic_client:
-            raise ValueError("Anthropic client not initialized")
-        
-        # Common: Prepare context
         existing_html, designs, system_prompt, user_content = self._prepare_ui_generation_context(
             widget_id=widget_id,
-            tools=tools,
-            user_message=user_message,
-            conversation_context=conversation_context,
-        )
+            tools=tools, user_message=user_message, conversation_context=conversation_context)
         
-        # Claude-specific: Build message content array with text and images
-        message_content = [{"type": "text", "text": user_content}]
-        
-        # Add logo images to message content for Claude to see and use for inspiration
+        message_content: list[dict[str, Any]] = [{"type": "text", "text": user_content}]
         logos = designs.get("logos", [])
         if logos:
-            logger.debug(f"Including {len(logos)} logo image(s) in Claude message for visual inspiration")
+            logger.debug(f"Including {len(logos)} logo image(s) in LLM message for visual inspiration")
             for logo in logos:
                 try:
-                    # Encode logo as base64 for Claude API
                     base64_data = base64.b64encode(logo.file_data).decode('utf-8')
-                    
-                    # Add image content block
                     message_content.append({
-                        "type": "image",
-                        "source": {
-                            "type": "base64",
-                            "media_type": logo.content_type,
-                            "data": base64_data,
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:{logo.content_type};base64,{base64_data}"
                         }
                     })
                     logger.debug(f"Added logo image: {logo.filename} ({logo.content_type}, {logo.file_size} bytes)")
                 except Exception as e:
-                    logger.warning(f"Failed to encode logo {logo.id} for Claude API: {e}")
+                    logger.warning(f"Failed to encode logo {logo.id} for LLM API: {e}")
         
-        # Add UX design images to message content for Claude to see and use for visual inspiration
         ux_designs = designs.get("ux_designs", [])
         if ux_designs:
-            logger.debug(f"Including {len(ux_designs)} UX design image(s) in Claude message for visual inspiration")
+            logger.debug(f"Including {len(ux_designs)} UX design image(s) in LLM message for visual inspiration")
             for ux_design in ux_designs:
                 try:
-                    # Encode UX design as base64 for Claude API
                     base64_data = base64.b64encode(ux_design.file_data).decode('utf-8')
-                    
-                    # Add image content block
                     message_content.append({
-                        "type": "image",
-                        "source": {
-                            "type": "base64",
-                            "media_type": ux_design.content_type,
-                            "data": base64_data,
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:{ux_design.content_type};base64,{base64_data}"
                         }
                     })
                     logger.debug(f"Added UX design image: {ux_design.filename} ({ux_design.content_type}, {ux_design.file_size} bytes)")
                 except Exception as e:
-                    logger.warning(f"Failed to encode UX design {ux_design.id} for Claude API: {e}")
+                    logger.warning(f"Failed to encode UX design {ux_design.id} for LLM API: {e}")
         
         try:
-            logger.debug(f"Calling Anthropic API for UI generation with model: {self.settings.claude_model}")
             logger.debug(f"Existing HTML present: {existing_html is not None}, Length: {len(existing_html) if existing_html else 0}")
             total_images = len(logos) + len(ux_designs)
             logger.debug(f"Message content blocks: {len(message_content)} (1 text + {total_images} images: {len(logos)} logos + {len(ux_designs)} UX designs)")
-            
-            response = self.anthropic_client.messages.create(
-                model=self.settings.claude_model,
-                max_tokens=self.settings.llm_ui_max_tokens,
+            messages = [{"role": "user", "content": message_content}]
+            raw_html, usage_info = self._call_llm(
+                model=self.model_name,
+                messages=messages,
                 system=system_prompt,
-                messages=[
-                    {"role": "user", "content": message_content}
-                ],
-                temperature=0.3,  # Lower temperature for more deterministic, accurate code
-            )
-            
-            # Claude-specific: Parse response
-            finish_reason = response.stop_reason if hasattr(response, 'stop_reason') else None
-            raw_html = response.content[0].text if response.content else ""
-            
-            # Log token usage
-            usage = response.usage if hasattr(response, 'usage') else None
-            input_tokens = usage.input_tokens if usage else 0
-            output_tokens = usage.output_tokens if usage else 0
-            
-            logger.info(
-                f"Claude UI generation - Tokens: {input_tokens} input + {output_tokens} output, "
-                f"Stop reason: {finish_reason}, Response length: {len(raw_html)} chars"
-            )
-            
-            # Common: Process response
-            return self._process_ui_generation_response(
-                raw_html=raw_html,
-                finish_reason=finish_reason,
-                input_tokens=input_tokens,
-                output_tokens=output_tokens,
-                provider="claude",
-            )
-        except Exception as e:
-            logger.error(f"Anthropic UI generation error: {e}", exc_info=True)
-            return None
-
-    def _generate_openai_ui_resource(
-        self,
-        widget_id: str,
-        tools: list[ToolResponse],
-        user_message: str,
-        conversation_context: str,
-    ) -> dict[str, Any]:
-        """Generate UI resource using OpenAI models."""
-        if not self.openai_client:
-            raise ValueError("OpenAI client not initialized")
-
-        # Common: Prepare context
-        existing_html, designs, system_prompt, user_content = self._prepare_ui_generation_context(
-            widget_id=widget_id,
-            tools=tools,
-            user_message=user_message,
-            conversation_context=conversation_context,
-        )
-
-        # OpenAI-specific: Add design context as text (OpenAI doesn't support images in same way)
-        design_context_lines = []
-        logos = designs.get("logos", [])
-        if logos:
-            design_context_lines.append(
-                "Available logos: " + ", ".join(logo.filename or logo.id for logo in logos)
-            )
-        ux_designs = designs.get("ux_designs", [])
-        if ux_designs:
-            design_context_lines.append(
-                "Reference UX designs: " + ", ".join(design.filename or design.id for design in ux_designs)
-            )
-
-        if design_context_lines:
-            user_content += "\n\nDesign Assets:\n" + "\n".join(f"- {line}" for line in design_context_lines)
-
-        try:
-            logger.debug(
-                f"Calling OpenAI API for UI generation with model: {self.settings.openai_model}"
-            )
-            response = self.openai_client.chat.completions.create(
-                model=self.settings.openai_model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_content},
-                ],
-                temperature=0.3,
+                temperature=0.1,  # Lower temperature for more deterministic, accurate code
                 max_tokens=self.settings.llm_ui_max_tokens,
             )
 
-            # OpenAI-specific: Parse response
-            choice = response.choices[0]
-            raw_html = choice.message.content or ""
-            finish_reason = choice.finish_reason
-            usage = getattr(response, "usage", None)
-            input_tokens = usage.prompt_tokens if usage else 0
-            output_tokens = usage.completion_tokens if usage else 0
-
-            logger.info(
-                f"OpenAI UI generation - Tokens: {input_tokens} input + {output_tokens} output, "
-                f"Stop reason: {finish_reason}, Response length: {len(raw_html)} chars"
-            )
-
-            # Common: Process response
             return self._process_ui_generation_response(
                 raw_html=raw_html,
-                finish_reason=finish_reason,
-                input_tokens=input_tokens,
-                output_tokens=output_tokens,
-                provider="openai",
+                finish_reason=usage_info.get("finish_reason"),
+                input_tokens=usage_info.get("input_tokens", 0),
+                output_tokens=usage_info.get("output_tokens", 0)
             )
         except Exception as e:
-            logger.error(f"OpenAI UI generation error: {e}", exc_info=True)
+            logger.error(f"LLM UI generation error: {e}", exc_info=True)
             return None
 
     def _extract_clean_html(self, raw_text: str) -> str:
@@ -1074,4 +804,3 @@ class LlmChat:
         # This allows the frontend to render Markdown properly
         
         return text
-
