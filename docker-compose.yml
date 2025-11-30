@@ -1,0 +1,59 @@
+version: '3.8'
+
+services:
+  pixie:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ""
+    ports:
+      - "8000:8000"
+    environment:
+      # Database Configuration (REQUIRED)
+      - DATABASE_URL=${DATABASE_URL}
+      - DB_USE_LOCAL=${DB_USE_LOCAL:-false}
+      
+      # Application Configuration
+      - MODE=${MODE:-production}
+      - APP_NAME=${APP_NAME:-Pixie}
+      - DEBUG=${DEBUG:-false}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      
+      # Server Configuration
+      - HOST=${HOST:-0.0.0.0}
+      - PORT=${PORT:-8000}
+      
+      # CORS Configuration
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:8000,http://localhost:8080}
+      - CORS_ALLOW_ALL_LOCALHOST=${CORS_ALLOW_ALL_LOCALHOST:-true}
+      - CORS_ALLOW_CREDENTIALS=${CORS_ALLOW_CREDENTIALS:-true}
+      
+      # LLM Configuration (optional)
+      - LLM_PROVIDER=${LLM_PROVIDER:-openai}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - CLAUDE_MODEL=${CLAUDE_MODEL:-claude-haiku-4-5-20251001}
+      
+      # OAuth Configuration (REQUIRED - change these!)
+      - OAUTH_SECRET_KEY=${OAUTH_SECRET_KEY:-change-me-in-production}
+      - OAUTH_REFRESH_TOKEN_PEPPER=${OAUTH_REFRESH_TOKEN_PEPPER:-change-me-refresh-pepper}
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:8000}
+      
+      # Optional: Google OAuth
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
+      
+      # Optional: GitHub OAuth
+      - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID:-}
+      - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET:-}
+      
+      # Guest Mode
+      - GUEST_MODE_ENABLED=${GUEST_MODE_ENABLED:-false}
+      
+    volumes:
+      # Mount logs directory for persistence
+      - ./logs:/app/logs
+    restart: unless-stopped
+

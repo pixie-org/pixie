@@ -20,6 +20,11 @@ PUBLIC_PATHS = [
 
 def is_public_path(path: str) -> bool:
     """Check if a path is public (doesn't require authentication)."""
+    # Skip authentication for static files and frontend routes
+    # Static files are served from root paths (not /api/)
+    if not path.startswith("/api/"):
+        return True
+    
     # Check exact matches and paths that start with public paths
     for public_path in PUBLIC_PATHS:
         if path == public_path or path.startswith(public_path):

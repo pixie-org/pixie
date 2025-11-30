@@ -1,6 +1,9 @@
 import { AUTH_TOKEN_KEY, REFRESH_TOKEN_KEY, broadcastTokenRefresh, isTokenExpiringWithin } from "@/lib/auth/tokenUtils";
 
-export const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string) ?? "http://localhost:8000";
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL as string | undefined;
+export const API_BASE_URL = apiBaseUrl && apiBaseUrl.trim() !== "" 
+  ? apiBaseUrl 
+  : "";
 
 const REFRESH_WINDOW_MS = 60 * 60 * 1000; // 1 hour
 let refreshPromise: Promise<boolean> | null = null;

@@ -7,6 +7,8 @@ from pathlib import Path
 from typing import AsyncGenerator
 
 from fastapi import FastAPI
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.api.public import api_router
 from app.server.auth_middleware import GUEST_USER_ID
@@ -139,6 +141,51 @@ def create_application() -> FastAPI:
 
     # Include routers
     app.include_router(api_router)
+
+    # Serve static files (frontend build)
+    static_dir = Path("static")
+    if static_dir.exists():
+        # Mount static files directory
+        app.mount("/assets", StaticFiles(directory=static_dir / "assets"), name="assets")
+        app.mount("/client", StaticFiles(directory=static_dir / "client"), name="client")
+        
+        # Serve static files from root (favicon, logo, etc.)
+        static_files = ["favicon.ico", "logo.png", "logo.ico", "robots.txt", "placeholder.svg"]
+        for filename in static_files:
+            file_path = static_dir / filename
+            if file_path.exists():
+                # Create a closure to capture filename correctly
+                def make_handler(fname: str):
+                    async def handler():
+                        return FileResponse(static_dir / fname)
+                    return handler
+                
+                app.get(f"/{filename}")(make_handler(filename))
+        
+        # Root route: serve index.html
+        @app.get("/")
+        async def serve_root():
+            index_path = static_dir / "index.html"
+            if index_path.exists():
+                return FileResponse(index_path)
+            from fastapi import HTTPException
+            raise HTTPException(status_code=404, detail="Frontend not found")
+        
+        # Catch-all route: serve index.html for client-side routing
+        # This must be added last to not interfere with API routes
+        @app.get("/{full_path:path}")
+        async def serve_index(full_path: str):
+            # Don't serve index.html for API routes (should be caught by API router)
+            if full_path.startswith("api/"):
+                from fastapi import HTTPException
+                raise HTTPException(status_code=404, detail="Not found")
+            
+            # Serve index.html for all other routes (client-side routing)
+            index_path = static_dir / "index.html"
+            if index_path.exists():
+                return FileResponse(index_path)
+            from fastapi import HTTPException
+            raise HTTPException(status_code=404, detail="Frontend not found")
 
     return app
 
