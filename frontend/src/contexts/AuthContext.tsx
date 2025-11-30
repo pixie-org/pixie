@@ -96,24 +96,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             const storedToken = localStorage.getItem(AUTH_TOKEN_KEY);
             if (storedToken) {
               setToken(storedToken);
+            } else {
+              setIsLoading(false);
             }
-            setIsLoading(false);
           }
         } else {
           // If config endpoint fails, assume normal mode
           const storedToken = localStorage.getItem(AUTH_TOKEN_KEY);
           if (storedToken) {
             setToken(storedToken);
+          } else {
+            setIsLoading(false);
           }
-          setIsLoading(false);
         }
       } catch (error) {
         // If config endpoint fails, assume normal mode
         const storedToken = localStorage.getItem(AUTH_TOKEN_KEY);
         if (storedToken) {
           setToken(storedToken);
+        } else {
+          setIsLoading(false);
         }
-        setIsLoading(false);
       }
     };
     
@@ -170,17 +173,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     
     if (!tokenToUse) {
       setUser(null);
+      setIsLoading(false);
       return;
     }
 
     // Guest mode: don't fetch from API, just use guest user
     if (guestModeEnabled && tokenToUse === GUEST_TOKEN) {
       setUser(GUEST_USER);
+      setIsLoading(false);
       return;
     }
 
     // In guest mode, don't try to fetch user from API
     if (guestModeEnabled) {
+      setIsLoading(false);
       return;
     }
 
@@ -196,6 +202,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (response.ok) {
         const userData = await response.json();
         setUser(userData);
+        setIsLoading(false);
       } else if (response.status === 401) {
         // Token expired, try to refresh
         const refreshed = await refreshAccessToken();
@@ -212,6 +219,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               const userData = await retryResponse.json();
               setUser(userData);
             }
+            setIsLoading(false);
+          } else {
+            setIsLoading(false);
           }
         } else {
           // Refresh failed, clear tokens
@@ -220,6 +230,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setToken(null);
           setUser(null);
           broadcastTokenRefresh(null);
+          setIsLoading(false);
         }
       } else {
         // Other error, clear tokens
@@ -228,6 +239,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setToken(null);
         setUser(null);
         broadcastTokenRefresh(null);
+        setIsLoading(false);
       }
     } catch (error) {
       localStorage.removeItem(AUTH_TOKEN_KEY);
@@ -235,6 +247,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setToken(null);
       setUser(null);
       broadcastTokenRefresh(null);
+      setIsLoading(false);
     }
   }, [token, guestModeEnabled, refreshAccessToken]);
 

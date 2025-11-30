@@ -213,6 +213,7 @@ export function useConnection({
         mcpRequestOptions.onprogress = (params: Progress) => {
           // Add progress notification to `Server Notification` window in the UI
           if (onNotification) {
+            // @ts-ignore - MCP SDK type system has deep instantiation issues
             onNotification({
               method: "notifications/progress",
               params,
@@ -223,8 +224,10 @@ export function useConnection({
 
       let response;
       try {
+        // @ts-ignore - MCP SDK type system has deep instantiation issues
         response = await mcpClient.request(
           requestWithMetadata,
+          // @ts-ignore - MCP SDK type system has deep instantiation issues
           schema,
           mcpRequestOptions,
         );
@@ -280,6 +283,7 @@ export function useConnection({
     }
 
     try {
+      // @ts-ignore - MCP SDK type system has deep instantiation issues
       const response = await makeRequest(request, CompleteResultSchema, {
         signal,
         suppressToast: true,
@@ -695,9 +699,11 @@ export function useConnection({
           ToolListChangedNotificationSchema,
           PromptListChangedNotificationSchema,
         ].forEach((notificationSchema) => {
+          // @ts-ignore - MCP SDK type system has deep instantiation issues
           client.setNotificationHandler(notificationSchema, onNotification);
         });
 
+        // @ts-ignore - MCP SDK type system has deep instantiation issues
         client.fallbackNotificationHandler = (
           notification: Notification,
         ): Promise<void> => {
@@ -814,6 +820,7 @@ export function useConnection({
         });
       }
 
+      // @ts-ignore - MCP SDK type system has deep instantiation issues
       setMcpClient(client);
       setConnectionStatus("connected");
     } catch (e) {

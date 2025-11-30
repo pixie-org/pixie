@@ -1,4 +1,6 @@
 """Application configuration using Pydantic Settings."""
+import os
+
 from functools import lru_cache
 from pathlib import Path
 from typing import List
@@ -155,10 +157,15 @@ class Settings(BaseSettings):
 
 
 def load_env_files() -> None:
-    """Load environment files in priority order: .env.local (if exists) then .env.
+    """Load environment files in priority order based on MODE.
     
-    This function loads .env first (base config), then .env.local (overrides).
-    If .env.local doesn't exist, only .env is loaded.
+    If MODE=production:
+        - Load .env first (base config)
+        - Load env.production (overrides .env)
+    
+    Otherwise (development):
+        - Load .env first (base config)
+        - Load .env.local (overrides .env, if exists)
     
     Environment files are loaded from the project root directory (parent of pixie/).
     """
@@ -167,16 +174,29 @@ def load_env_files() -> None:
     # .parent.parent.parent.parent = root directory
     root_dir = Path(__file__).parent.parent.parent.parent
     
-    env_local = root_dir / ".env.local"
     env_file = root_dir / ".env"
+    mode = os.getenv("MODE", "").lower()
     
     # Load .env first (base config)
     if env_file.exists():
         load_dotenv(dotenv_path=env_file, override=False)
     
-    # Load .env.local second (overrides .env)
-    if env_local.exists():
-        load_dotenv(dotenv_path=env_local, override=True)
+    # Load environment-specific file based on MODE
+    if mode == "production":
+        env_production = root_dir / ".env.production"
+        if env_production.exists():
+            load_dotenv(dotenv_path=env_production, override=True)
+        else:
+            import warnings
+            warnings.warn(
+                f"MODE=production but env.production not found at {env_production}. "
+                "Using .env only. Create env.production for production configuration.",
+                UserWarning
+            )
+    else:
+        env_local = root_dir / ".env.local"
+        if env_local.exists():
+            load_dotenv(dotenv_path=env_local, override=True)
 
 
 @lru_cache()

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { getTool, updateTool, deleteTool, convertToolResponseToTool } from "@/lib/api";
+import { getTool, updateTool, deleteTool, convertToolResponseToTool, getToolDetail } from "@/lib/api";
 import { Trash2 } from "lucide-react";
 import {
   Dialog,
@@ -116,20 +116,16 @@ const EditToolDialog = ({ tool, open, onOpenChange, onSave, onDelete, projectId 
     setSaveError(null);
 
     try {
-      // Prepare update data - only updatable fields
       const updateData = {
-        tool_name: name,
-        tool_description: description,
-        status: status,
+        name: name,
+        description: description
       };
 
       // Call update endpoint with PATCH
-      const updatedToolResponse = await updateTool(tool.id, updateData, projectId);
-      
-      // Convert back to internal format
-      const convertedTool = convertToolResponseToTool(updatedToolResponse);
-      
+      await updateTool(tool.id, updateData, projectId);
+      const fullToolResponse = await getTool(tool.id, projectId);
       // Call the onSave callback with updated tool
+      const convertedTool = convertToolResponseToTool(fullToolResponse);
       onSave(convertedTool);
       onOpenChange(false);
     } catch (error: any) {

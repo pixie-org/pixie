@@ -1,6 +1,7 @@
 import { isUIResource } from '@mcp-ui/client';
 import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { PixieRenderer } from '../renderer/renderer';
+import type { EmbeddedResource } from '@modelcontextprotocol/sdk/types.js';
 import { Loader2, AlertCircle } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -294,6 +295,9 @@ export const WidgetViewer: React.FC<WidgetViewerProps> = ({
         await new Promise(resolve => setTimeout(resolve, 100));
       }
     }
+    if (!mcpClient) {
+      throw new Error("MCP client is not available");
+    }
     return await mcpClient.callTool({
       name: toolName,
       arguments: toolParams,
@@ -302,7 +306,7 @@ export const WidgetViewer: React.FC<WidgetViewerProps> = ({
 
   return (
     <PixieRenderer
-      resource={uiResource?.resource ?? {}}
+      resource={uiResource?.resource as Partial<EmbeddedResource> ?? {}}
       mcpToolCallable={mcpToolCallable}
       htmlProps={{
         sandboxPermissions: 'allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-forms',

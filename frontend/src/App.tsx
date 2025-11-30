@@ -14,7 +14,7 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { ProjectRedirect } from "@/components/ProjectRedirect";
 import AuthCallback from "@/pages/AuthCallback";
 import McpOAuthCallback from "@/pages/McpOAuthCallback";
-import Landing from "@/pages/Landing";
+import HeroPage from "@/pages/HeroPage";
 import Login from "@/pages/Login";
 import Waitlist from "@/pages/Waitlist";
 import Index from "./pages/Index";
@@ -31,8 +31,6 @@ import Metrics from "./pages/Metrics";
 import Logs from "./pages/Logs";
 import Deployments from "./pages/Deployments";
 import CreateWidget from "./pages/CreateWidget";
-import { useCallback } from "react";
-
 const queryClient = new QueryClient();
 
 function AppContent() {
@@ -50,7 +48,7 @@ function AppContent() {
               <div className="flex-1">
                 <PageBreadcrumb />
               </div>
-              <HeaderActions />
+              <HeaderActions isUserSignedIn={true} />
             </header>
             <div className="flex-1 p-4 lg:p-6">
               <Routes>
@@ -82,12 +80,12 @@ function AppContent() {
   // Production mode: Show landing page if not logged in
   if (!isLoading && !user) {
     return (
-      <Routes>
-        <Route path="/" element={<Landing />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/auth/callback" element={<AuthCallback />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+          <Routes>
+            <Route path="/" element={<HeroPage isUserSignedIn={false} />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/auth/callback" element={<AuthCallback />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
     );
   }
 
@@ -108,42 +106,49 @@ function AppContent() {
 
   // Production mode: Show main app if logged in and not waitlisted
   return (
-    <SidebarProvider defaultOpen={true} style={{ "--sidebar-width": "14rem", "--sidebar-width-icon": "3.5rem" } as React.CSSProperties}>
-      <div className="flex min-h-screen w-full">
-        <AppSidebar />
-        <main className="flex-1 flex flex-col">
-          <header className="sticky top-0 z-10 flex h-12 items-center gap-4 border-b bg-background/80 backdrop-blur-md glass-subtle px-4 lg:h-12 lg:px-6">
-            <SidebarTrigger className="md:hidden" />
-            <div className="flex-1">
-              <PageBreadcrumb />
-            </div>
-            <HeaderActions />
-          </header>
-          <div className="flex-1 p-4 lg:p-6">
-            <Routes>
-              <Route path="/oauth/callback" element={<McpOAuthCallback />} />
-              <Route path="/auth/callback" element={<AuthCallback />} />
-              <Route path="/projects/:projectId" element={<ProtectedRoute><Index /></ProtectedRoute>} />
-              <Route path="/projects/:projectId/toolkits" element={<ProtectedRoute><Toolkits /></ProtectedRoute>} />
-              <Route path="/projects/:projectId/designs" element={<ProtectedRoute><Designs /></ProtectedRoute>} />
-              <Route path="/projects/:projectId/widgets" element={<ProtectedRoute><Widgets /></ProtectedRoute>} />
-              <Route path="/projects/:projectId/widgets/create" element={<ProtectedRoute><CreateWidget /></ProtectedRoute>} />
-              <Route path="/projects/:projectId/toolkits/:toolkitId" element={<ProtectedRoute><ToolkitDetail /></ProtectedRoute>} />
-              <Route path="/projects/:projectId/widgets/:widgetId/edit-ux" element={<ProtectedRoute><WidgetUxEdit /></ProtectedRoute>} />
-              <Route path="/projects/:projectId/env-variables" element={<ProtectedRoute><EnvVariables /></ProtectedRoute>} />
-              <Route path="/projects/:projectId/playground" element={<ProtectedRoute><Playground /></ProtectedRoute>} />
-              <Route path="/projects/:projectId/mcp" element={<ProtectedRoute><MCP /></ProtectedRoute>} />
-              <Route path="/projects/:projectId/evaluate" element={<ProtectedRoute><Evaluate /></ProtectedRoute>} />
-              <Route path="/projects/:projectId/deployments" element={<ProtectedRoute><Deployments /></ProtectedRoute>} />
-              <Route path="/projects/:projectId/metrics" element={<ProtectedRoute><Metrics /></ProtectedRoute>} />
-              <Route path="/projects/:projectId/logs" element={<ProtectedRoute><Logs /></ProtectedRoute>} />
-              <Route path="/" element={<ProtectedRoute><ProjectRedirect /></ProtectedRoute>} />
-              <Route path="*" element={<ProtectedRoute><ProjectRedirect /></ProtectedRoute>} />
-            </Routes>
-          </div>
-        </main>
+    <div className="flex min-h-screen w-full flex-col">
+      <div className="flex-1">
+        <Routes>
+          <Route path="/*" element={
+            <SidebarProvider defaultOpen={true} style={{ "--sidebar-width": "14rem", "--sidebar-width-icon": "3.5rem" } as React.CSSProperties}>
+              <div className="flex min-h-screen w-full">
+                <AppSidebar />
+                <main className="flex-1 flex flex-col">
+                  <header className="sticky top-0 z-10 flex h-12 items-center gap-4 border-b bg-background/80 backdrop-blur-md glass-subtle px-4 lg:h-12 lg:px-6">
+                    <SidebarTrigger className="md:hidden" />
+                    <div className="flex-1">
+                      <PageBreadcrumb />
+                    </div>
+                    <HeaderActions isUserSignedIn={true} />
+                  </header>
+                  <div className="flex-1 p-4 lg:p-6">
+                    <Routes>
+                      <Route path="oauth/callback" element={<McpOAuthCallback />} />
+                      <Route path="auth/callback" element={<AuthCallback />} />
+                      <Route path="projects/:projectId" element={<ProtectedRoute><Index /></ProtectedRoute>} />
+                      <Route path="projects/:projectId/toolkits" element={<ProtectedRoute><Toolkits /></ProtectedRoute>} />
+                      <Route path="projects/:projectId/designs" element={<ProtectedRoute><Designs /></ProtectedRoute>} />
+                      <Route path="projects/:projectId/widgets" element={<ProtectedRoute><Widgets /></ProtectedRoute>} />
+                      <Route path="projects/:projectId/widgets/create" element={<ProtectedRoute><CreateWidget /></ProtectedRoute>} />
+                      <Route path="projects/:projectId/toolkits/:toolkitId" element={<ProtectedRoute><ToolkitDetail /></ProtectedRoute>} />
+                      <Route path="projects/:projectId/widgets/:widgetId/edit-ux" element={<ProtectedRoute><WidgetUxEdit /></ProtectedRoute>} />
+                      <Route path="projects/:projectId/env-variables" element={<ProtectedRoute><EnvVariables /></ProtectedRoute>} />
+                      <Route path="projects/:projectId/playground" element={<ProtectedRoute><Playground /></ProtectedRoute>} />
+                      <Route path="projects/:projectId/mcp" element={<ProtectedRoute><MCP /></ProtectedRoute>} />
+                      <Route path="projects/:projectId/evaluate" element={<ProtectedRoute><Evaluate /></ProtectedRoute>} />
+                      <Route path="projects/:projectId/deployments" element={<ProtectedRoute><Deployments /></ProtectedRoute>} />
+                      <Route path="projects/:projectId/metrics" element={<ProtectedRoute><Metrics /></ProtectedRoute>} />
+                      <Route path="projects/:projectId/logs" element={<ProtectedRoute><Logs /></ProtectedRoute>} />
+                      <Route path="*" element={<ProtectedRoute><ProjectRedirect /></ProtectedRoute>} />
+                    </Routes>
+                  </div>
+                </main>
+              </div>
+            </SidebarProvider>
+          } />
+        </Routes>
       </div>
-    </SidebarProvider>
+    </div>
   );
 }
 

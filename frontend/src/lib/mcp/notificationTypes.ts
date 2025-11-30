@@ -9,5 +9,6 @@ import {
     ServerNotificationSchema,
   ).or(BaseNotificationSchema);
   
+  // @ts-ignore - Type instantiation is excessively deep, but the type is correct at runtime
   export type Notification = SchemaOutput<typeof NotificationSchema>;
   

@@ -1,6 +1,17 @@
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { useNavigate } from "react-router-dom";
+import { Button } from "@/components/ui/button";
+import { User, LayoutDashboard } from "lucide-react";
+import { useProject } from "@/contexts/ProjectContext";
 
-export function HeaderActions() {
+interface HeaderActionsProps {
+  isUserSignedIn: boolean;
+}
+
+export function HeaderActions({ isUserSignedIn }: HeaderActionsProps) {
+  const navigate = useNavigate();
+  const { selectedProject, projects } = useProject();
+
   return (
     <div className="flex items-center gap-3 text-gray-600 dark:text-gray-400">
       <ThemeToggle />
@@ -39,6 +50,43 @@ export function HeaderActions() {
           <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"></path>
         </svg>
       </a>
+      {!isUserSignedIn && (
+        <>
+          <span className="h-6 w-px bg-gray-200 dark:bg-white/10" aria-hidden="true"></span>
+          <Button
+            variant="default"
+            size="sm"
+            onClick={() => navigate("/login")}
+            className="bg-primary text-primary-foreground hover:bg-primary/90"
+          >
+            <User className="mr-2 h-4 w-4" />
+            Login
+          </Button>
+        </>
+      )}
+      {isUserSignedIn && (
+        <>
+          <span className="h-6 w-px bg-gray-200 dark:bg-white/10" aria-hidden="true"></span>
+          <Button
+            variant="default"
+            size="sm"
+            onClick={() => {
+              // Navigate to selected project or first project, or root which will redirect
+              if (selectedProject) {
+                navigate(`/projects/${selectedProject.id}`);
+              } else if (projects.length > 0) {
+                navigate(`/projects/${projects[0].id}`);
+              } else {
+                navigate("/");
+              }
+            }}
+            className="bg-primary text-primary-foreground hover:bg-primary/90"
+          >
+            <LayoutDashboard className="mr-2 h-4 w-4" />
+            Dashboard
+          </Button>
+        </>
+      )}
     </div>
   );
 }

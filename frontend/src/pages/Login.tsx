@@ -21,8 +21,8 @@ export default function Login() {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-background via-background to-muted/20 p-4">
-      <div className="w-full max-w-md">
+    <div className="relative flex items-center justify-center min-h-screen bg-white dark:bg-gray-900 p-4">
+      <div className="relative z-10 w-full max-w-md">
         <Card className="border-2 shadow-xl">
           <CardHeader className="space-y-6 text-center pb-8">
             <div className="flex justify-center">

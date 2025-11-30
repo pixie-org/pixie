@@ -1,4 +1,5 @@
 .env.local
+.env.production
 
 # Python virtual environment
 venv/
